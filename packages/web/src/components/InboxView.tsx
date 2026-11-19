@@ -1,0 +1,836 @@
+import { useState, type FormEvent } from 'react'
+import {
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Filter,
+  Inbox,
+  KeyRound,
+  Plus,
+  Send,
+  ShieldAlert,
+  Trash2,
+  Webhook,
+  Workflow,
+  X
+} from 'lucide-react'
+import type { InboxItem, InboxStatus, RoutingMatchType } from '@myagents/protocol'
+import { rpc } from '../api/rpc-client'
+import { useAppStore } from '../store/app-store'
+
+type InboxSubTab = 'items' | 'webhooks' | 'rules'
+
+function statusBadge(status: InboxStatus): { label: string; cls: string } {
+  switch (status) {
+    case 'new':
+      return { label: '待处理', cls: 'bg-[#c2542d]/15 text-[#c2542d]' }
+    case 'in_progress':
+      return { label: '处理中', cls: 'bg-blue-50 text-blue-700' }
+    case 'resolved':
+      return { label: '已解决', cls: 'bg-emerald-50 text-emerald-700' }
+    case 'ignored':
+      return { label: '已忽略', cls: 'bg-[#efefef] text-[#777]' }
+  }
+}
+
+export function InboxView() {
+  const inboxItems = useAppStore((s) => s.inboxItems)
+  const webhooks = useAppStore((s) => s.webhooks)
+  const routingRules = useAppStore((s) => s.routingRules)
+  const pluginDescriptors = useAppStore((s) => s.pluginDescriptors)
+  const pluginInstances = useAppStore((s) => s.pluginInstances)
+  const agents = useAppStore((s) => s.agents)
+  const rooms = useAppStore((s) => s.rooms)
+  const workspaces = useAppStore((s) => s.workspaces)
+  const refreshInbox = useAppStore((s) => s.refreshInbox)
+  const refreshAll = useAppStore((s) => s.refreshAll)
+  const selectRoom = useAppStore((s) => s.selectRoom)
+
+  const [tab, setTab] = useState<InboxSubTab>('items')
+  const [statusFilter, setStatusFilter] = useState<InboxStatus | 'all'>('all')
+  const [error, setError] = useState<string | null>(null)
+
+  // Manual ticket creation
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualTitle, setManualTitle] = useState('')
+  const [manualContent, setManualContent] = useState('')
+  const [manualAuthor, setManualAuthor] = useState('admin')
+
+  // Assign modal state
+  const [assignTarget, setAssignTarget] = useState<InboxItem | null>(null)
+  const [assignMode, setAssignMode] = useState<'create_room' | 'append_room'>('create_room')
+  const [assignRoomId, setAssignRoomId] = useState('')
+  const [assignStrategyId, setAssignStrategyId] = useState<'single' | 'open-channel' | 'roundtable'>('open-channel')
+  const [assignAgentIds, setAssignAgentIds] = useState<string[]>(() => agents.slice(0, 1).map((a) => a.id))
+  const [assignWorkspaceId, setAssignWorkspaceId] = useState('')
+  const [assignAllowWrite, setAssignAllowWrite] = useState(false)
+
+  // Webhook creation state
+  const [hookName, setHookName] = useState('')
+  const [createdHookSecret, setCreatedHookSecret] = useState<{ id: string; name: string; secret: string } | null>(null)
+  const [copiedSecret, setCopiedSecret] = useState(false)
+
+  // Plugin instance form
+  const [pluginId, setPluginId] = useState('github-webhook')
+  const [pluginName, setPluginName] = useState('')
+  const [pluginSecret, setPluginSecret] = useState('')
+
+  // Rule creation state
+  const [ruleName, setRuleName] = useState('')
+  const [rulePriority, setRulePriority] = useState(100)
+  const [ruleSourceFilter, setRuleSourceFilter] = useState('')
+  const [ruleMatchType, setRuleMatchType] = useState<RoutingMatchType>('keyword')
+  const [ruleMatchExpr, setRuleMatchExpr] = useState('')
+  const [ruleAllowWrite, setRuleAllowWrite] = useState(false)
+  const [ruleStrategyId, setRuleStrategyId] = useState<'single' | 'open-channel' | 'roundtable'>('open-channel')
+  const [ruleAgentIds, setRuleAgentIds] = useState<string[]>(() => agents.slice(0, 1).map((a) => a.id))
+
+  const visibleItems = statusFilter === 'all' ? inboxItems : inboxItems.filter((i) => i.status === statusFilter)
+
+  const openAssignModal = (item: InboxItem) => {
+    setAssignTarget(item)
+    setAssignMode('create_room')
+    setAssignAgentIds(agents.slice(0, 1).map((a) => a.id))
+    setAssignStrategyId(agents.length > 1 ? 'open-channel' : 'single')
+    setAssignRoomId(rooms[0]?.id ?? '')
+    setAssignWorkspaceId('')
+    setAssignAllowWrite(false)
+  }
+
+  const handleCreateManual = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    try {
+      await rpc.call('inbox.createManual', {
+        title: manualTitle,
+        content: manualContent,
+        authorName: manualAuthor
+      })
+      setManualTitle('')
+      setManualContent('')
+      setManualOpen(false)
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建工单失败')
+    }
+  }
+
+  const handleAssignSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!assignTarget) return
+    setError(null)
+    try {
+      const updated = await rpc.call<InboxItem>('inbox.assign', {
+        itemId: assignTarget.id,
+        mode: assignMode,
+        roomId: assignMode === 'append_room' ? assignRoomId : undefined,
+        strategyId: assignMode === 'create_room' ? assignStrategyId : undefined,
+        agentIds: assignMode === 'create_room' ? assignAgentIds : undefined,
+        workspaceId: assignWorkspaceId || undefined,
+        allowWrite: assignAllowWrite
+      })
+      setAssignTarget(null)
+      await refreshAll()
+      if (updated.assignedRoomId) {
+        await selectRoom(updated.assignedRoomId)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '指派失败')
+    }
+  }
+
+  const handleSetStatus = async (itemId: string, status: InboxStatus) => {
+    setError(null)
+    try {
+      await rpc.call('inbox.setStatus', { itemId, status })
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新状态失败')
+    }
+  }
+
+  const handleCreateWebhook = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    try {
+      const res = await rpc.call<{ webhook: { id: string; name: string }; secret: string }>('webhooks.create', {
+        name: hookName
+      })
+      setHookName('')
+      setCreatedHookSecret({ id: res.webhook.id, name: res.webhook.name, secret: res.secret })
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建 Webhook 失败')
+    }
+  }
+
+  const handleDeleteWebhook = async (id: string) => {
+    await rpc.call('webhooks.delete', { id })
+    await refreshInbox()
+  }
+
+  const handleConfigurePlugin = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    try {
+      await rpc.call('plugins.configure', {
+        pluginId,
+        name: pluginName,
+        config: pluginSecret.trim() ? { webhookSecret: pluginSecret.trim() } : {},
+        enabled: true
+      })
+      setPluginName('')
+      setPluginSecret('')
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '配置插件失败')
+    }
+  }
+
+  const handleCreateRule = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    try {
+      const selectedAgents = ruleAgentIds.length > 0 ? ruleAgentIds : agents.slice(0, 1).map((a) => a.id)
+      await rpc.call('routingRules.save', {
+        name: ruleName,
+        priority: Number(rulePriority) || 100,
+        sourceFilter: ruleSourceFilter.trim() || null,
+        matchType: ruleMatchType,
+        matchExpr: ruleMatchExpr,
+        allowWrite: ruleAllowWrite,
+        enabled: true,
+        action: {
+          mode: 'create_room',
+          strategyId: ruleStrategyId,
+          agentIds: selectedAgents
+        }
+      })
+      setRuleName('')
+      setRuleMatchExpr('')
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存路由规则失败')
+    }
+  }
+
+  const toggleRuleEnabled = async (ruleId: string) => {
+    const r = routingRules.find((x) => x.id === ruleId)
+    if (!r) return
+    await rpc.call('routingRules.save', {
+      id: r.id,
+      name: r.name,
+      priority: r.priority,
+      sourceFilter: r.sourceFilter,
+      matchType: r.matchType,
+      matchExpr: r.matchExpr,
+      allowWrite: r.allowWrite,
+      action: r.action,
+      enabled: !r.enabled
+    })
+    await refreshInbox()
+  }
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedSecret(true)
+      setTimeout(() => setCopiedSecret(false), 1500)
+    } catch {
+      // ignore clipboard errors
+    }
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-6 bg-[#f8f8f8]">
+      <div className="max-w-5xl mx-auto space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-base font-semibold text-[#111] flex items-center gap-2">
+              <Inbox size={17} className="text-[#c2542d]" />
+              <span>统一收件箱（Unified Inbox & Webhooks）</span>
+            </h1>
+            <p className="text-xs text-[#666] mt-0.5">
+              接纳外部 Webhook、SourcePlugin 与手动工单，默认启用 Lockdown 只读防注入隔离并自动/手动派发到 Agent 房间。
+            </p>
+          </div>
+          <div className="flex items-center gap-1 p-1 bg-white border border-[#e5e5e5] rounded-lg text-xs">
+            {([
+              ['items', `工单队列 (${inboxItems.length})`, Inbox],
+              ['webhooks', `Webhook 与插件 (${webhooks.length})`, Webhook],
+              ['rules', `自动路由规则 (${routingRules.length})`, Workflow]
+            ] as const).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md cursor-pointer ${
+                  tab === key ? 'bg-[#c2542d]/10 text-[#c2542d] font-medium' : 'text-[#555] hover:bg-[#f5f5f5]'
+                }`}
+              >
+                <Icon size={13} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+
+        {/* TAB 1: ITEMS */}
+        {tab === 'items' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs">
+                <Filter size={13} className="text-[#888]" />
+                {(['all', 'new', 'in_progress', 'resolved', 'ignored'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setStatusFilter(st)}
+                    className={`px-2.5 py-1 rounded-md border cursor-pointer ${
+                      statusFilter === st
+                        ? 'bg-[#111] text-white border-[#111]'
+                        : 'bg-white text-[#555] border-[#dcdcdc] hover:border-[#aaa]'
+                    }`}
+                  >
+                    {st === 'all' ? '全部' : statusBadge(st).label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualOpen(!manualOpen)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] cursor-pointer"
+              >
+                <Plus size={13} />
+                <span>手动新建工单</span>
+              </button>
+            </div>
+
+            {manualOpen && (
+              <form onSubmit={handleCreateManual} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs text-[#555] mb-1">工单标题 *</label>
+                    <input
+                      required
+                      value={manualTitle}
+                      onChange={(e) => setManualTitle(e.target.value)}
+                      placeholder="例如：排查支付回调异常"
+                      className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#555] mb-1">提交人</label>
+                    <input
+                      value={manualAuthor}
+                      onChange={(e) => setManualAuthor(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-[#555] mb-1">内容详情 *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={manualContent}
+                    onChange={(e) => setManualContent(e.target.value)}
+                    placeholder="描述背景、日志或上下文信息..."
+                    className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setManualOpen(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
+                    取消
+                  </button>
+                  <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                    入箱并匹配规则
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {visibleItems.length === 0 ? (
+              <div className="bg-white border border-[#e5e5e5] rounded-xl p-8 text-center text-xs text-[#888]">
+                暂无收件箱工单，可通过手动新建或 Webhook 接入外部事件。
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {visibleItems.map((item) => {
+                  const badge = statusBadge(item.status)
+                  return (
+                    <div key={item.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${badge.cls}`}>{badge.label}</span>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">{item.source}</span>
+                            <span className="text-sm font-medium text-[#111] truncate">{item.title}</span>
+                          </div>
+                          <div className="text-[11px] text-[#888] flex items-center gap-3 flex-wrap">
+                            <span>提交人：{item.authorName}</span>
+                            <span>{new Date(item.createdAt).toLocaleString()}</span>
+                            {item.matchedRuleId && <span className="text-emerald-700">已命中自动路由规则</span>}
+                            {item.externalUrl && (
+                              <a
+                                href={item.externalUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-0.5 text-[#c2542d] hover:underline"
+                              >
+                                <span>原文</span>
+                                <ExternalLink size={10} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {item.assignedRoomId && (
+                            <button
+                              type="button"
+                              onClick={() => void selectRoom(item.assignedRoomId!)}
+                              className="px-2.5 py-1 text-xs border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg text-[#111] cursor-pointer"
+                            >
+                              进入房间
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => openAssignModal(item)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#c2542d]/10 text-[#c2542d] hover:bg-[#c2542d]/15 rounded-lg cursor-pointer"
+                          >
+                            <Send size={11} />
+                            <span>指派处理</span>
+                          </button>
+                          {item.status !== 'resolved' && (
+                            <button
+                              type="button"
+                              onClick={() => void handleSetStatus(item.id, 'resolved')}
+                              className="px-2 py-1 text-xs border border-[#dcdcdc] hover:border-emerald-500 hover:text-emerald-700 rounded-lg cursor-pointer"
+                            >
+                              解决
+                            </button>
+                          )}
+                          {item.status !== 'ignored' && (
+                            <button
+                              type="button"
+                              onClick={() => void handleSetStatus(item.id, 'ignored')}
+                              className="px-2 py-1 text-xs border border-[#dcdcdc] hover:text-[#333] text-[#777] rounded-lg cursor-pointer"
+                            >
+                              忽略
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-[#444] whitespace-pre-wrap line-clamp-3 bg-[#fafafa] border border-[#f0f0f0] rounded-lg p-2.5">
+                        {item.content}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: WEBHOOKS & PLUGINS */}
+        {tab === 'webhooks' && (
+          <div className="space-y-5">
+            {createdHookSecret && (
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-amber-900 flex items-center gap-1.5">
+                    <KeyRound size={14} />
+                    <span>Webhook「{createdHookSecret.name}」密钥仅显示一次，请妥善保存：</span>
+                  </div>
+                  <button type="button" onClick={() => setCreatedHookSecret(null)} className="text-amber-800 cursor-pointer">
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="font-mono bg-white border border-amber-200 rounded px-2.5 py-1.5 flex items-center justify-between gap-2">
+                  <span className="truncate">
+                    POST {window.location.origin}/webhooks/generic/{createdHookSecret.id} · X-Webhook-Secret: {createdHookSecret.secret}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void copyText(createdHookSecret.secret)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 rounded text-amber-900 shrink-0 cursor-pointer"
+                  >
+                    {copiedSecret ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+                    <span>{copiedSecret ? '已复制 Secret' : '复制 Secret'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateWebhook} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
+              <div className="text-xs font-medium text-[#333]">创建通用 Webhook 接入端点</div>
+              <div className="flex gap-2">
+                <input
+                  required
+                  value={hookName}
+                  onChange={(e) => setHookName(e.target.value)}
+                  placeholder="例如：生产告警 / 客服表单"
+                  className="flex-1 px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] cursor-pointer"
+                >
+                  生成 Webhook & Secret
+                </button>
+              </div>
+            </form>
+
+            <div className="bg-white border border-[#e5e5e5] rounded-xl divide-y divide-[#efefef]">
+              {webhooks.length === 0 ? (
+                <div className="p-6 text-center text-xs text-[#888]">尚未创建通用 Webhook</div>
+              ) : (
+                webhooks.map((w) => (
+                  <div key={w.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="font-medium text-[#111]">{w.name}</div>
+                      <div className="font-mono text-[11px] text-[#777] truncate">
+                        POST {window.location.origin}/webhooks/generic/{w.id}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteWebhook(w.id)}
+                      className="p-1.5 text-[#888] hover:text-red-600 cursor-pointer"
+                      title="删除 Webhook"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* SourcePlugin Registry & Instances */}
+            <div className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
+              <div className="text-xs font-medium text-[#333]">SourcePlugin 来源插件配置（如 GitHub Webhook）</div>
+              <form onSubmit={handleConfigurePlugin} className="grid grid-cols-4 gap-2.5 text-xs">
+                <select
+                  value={pluginId}
+                  onChange={(e) => setPluginId(e.target.value)}
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                >
+                  {pluginDescriptors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  required
+                  value={pluginName}
+                  onChange={(e) => setPluginName(e.target.value)}
+                  placeholder="实例名称（如 my-repo）"
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                />
+                <input
+                  value={pluginSecret}
+                  onChange={(e) => setPluginSecret(e.target.value)}
+                  placeholder="Webhook HMAC Secret（可选）"
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#111] text-white rounded-lg cursor-pointer"
+                >
+                  创建插件实例
+                </button>
+              </form>
+              {pluginInstances.length > 0 && (
+                <div className="divide-y divide-[#f0f0f0] border-t border-[#efefef] pt-2">
+                  {pluginInstances.map((inst) => (
+                    <div key={inst.id} className="py-2 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-medium text-[#111]">{inst.name}</span>
+                        <span className="ml-2 font-mono text-[11px] text-[#777]">
+                          POST {window.location.origin}/webhooks/{inst.pluginId}/{inst.id}
+                        </span>
+                      </div>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                        {inst.enabled ? '已启用' : '已禁用'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: ROUTING RULES */}
+        {tab === 'rules' && (
+          <div className="space-y-4">
+            <form onSubmit={handleCreateRule} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3 text-xs">
+              <div className="font-medium text-[#333]">新增自动路由规则</div>
+              <div className="grid grid-cols-4 gap-2.5">
+                <input
+                  required
+                  value={ruleName}
+                  onChange={(e) => setRuleName(e.target.value)}
+                  placeholder="规则名称 *"
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                />
+                <input
+                  type="number"
+                  value={rulePriority}
+                  onChange={(e) => setRulePriority(Number(e.target.value))}
+                  placeholder="优先级 (越小越先)"
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                />
+                <input
+                  value={ruleSourceFilter}
+                  onChange={(e) => setRuleSourceFilter(e.target.value)}
+                  placeholder="来源过滤（空=全部，如 github）"
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                />
+                <select
+                  value={ruleStrategyId}
+                  onChange={(e) => setRuleStrategyId(e.target.value as 'single' | 'open-channel' | 'roundtable')}
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                >
+                  <option value="single">1v1 单聊 (single)</option>
+                  <option value="open-channel">开放协作群 (open-channel)</option>
+                  <option value="roundtable">圆桌讨论室 (roundtable)</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                <select
+                  value={ruleMatchType}
+                  onChange={(e) => setRuleMatchType(e.target.value as RoutingMatchType)}
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                >
+                  <option value="keyword">keyword（逗号分隔关键词）</option>
+                  <option value="regex">regex（正则表达式）</option>
+                  <option value="meta_equals">meta_equals（字段=值）</option>
+                  <option value="always">always（匹配全部）</option>
+                </select>
+                <input
+                  value={ruleMatchExpr}
+                  onChange={(e) => setRuleMatchExpr(e.target.value)}
+                  placeholder={ruleMatchType === 'always' ? '留空匹配全部' : '匹配表达式（如 urgent,bug）'}
+                  className="col-span-2 px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg font-mono"
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[#555]">目标 Agent：</span>
+                  {agents.map((a) => {
+                    const checked = ruleAgentIds.includes(a.id)
+                    return (
+                      <label key={a.id} className="inline-flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setRuleAgentIds((prev) =>
+                              prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id]
+                            )
+                          }
+                        />
+                        <span>{a.name}</span>
+                      </label>
+                    )
+                  })}
+                  <label className="inline-flex items-center gap-1 text-amber-800 cursor-pointer ml-2">
+                    <input
+                      type="checkbox"
+                      checked={ruleAllowWrite}
+                      onChange={(e) => setRuleAllowWrite(e.target.checked)}
+                    />
+                    <ShieldAlert size={12} />
+                    <span>允许写入工作区（不勾选则默认 Lockdown 只读防注入）</span>
+                  </label>
+                </div>
+                <button type="submit" className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                  保存规则
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-2">
+              {routingRules.length === 0 ? (
+                <div className="bg-white border border-[#e5e5e5] rounded-xl p-6 text-center text-xs text-[#888]">
+                  暂无自动路由规则，入箱工单将等待人工指派。
+                </div>
+              ) : (
+                routingRules.map((r) => (
+                  <div key={r.id} className="bg-white border border-[#e5e5e5] rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs">
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono px-1.5 py-0.5 rounded bg-[#f2f2f2]">P{r.priority}</span>
+                        <span className="font-medium text-[#111]">{r.name}</span>
+                        <span className="font-mono text-[#666]">{r.matchType}{r.matchExpr ? `: ${r.matchExpr}` : ''}</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded ${
+                            r.allowWrite ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          {r.allowWrite ? '可写工作区' : '默认 Lockdown 只读防注入'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#888]">
+                        目标策略：{r.action.strategyId || 'open-channel'} · 来源过滤：{r.sourceFilter || '*'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => void toggleRuleEnabled(r.id)}
+                        className={`px-2 py-1 rounded border cursor-pointer ${
+                          r.enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-[#dcdcdc] text-[#888]'
+                        }`}
+                      >
+                        {r.enabled ? '已启用' : '已停用'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void rpc.call('routingRules.delete', { id: r.id }).then(() => refreshInbox())}
+                        className="p-1 text-[#888] hover:text-red-600 cursor-pointer"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Assign Modal */}
+      {assignTarget && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <form onSubmit={handleAssignSubmit} className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-3.5 shadow-lg text-xs">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">指派工单：{assignTarget.title}</h3>
+              <button type="button" onClick={() => setAssignTarget(null)} className="text-[#777] cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1 p-1 bg-[#f3f3f3] rounded-lg">
+              <button
+                type="button"
+                onClick={() => setAssignMode('create_room')}
+                className={`py-1.5 rounded-md font-medium cursor-pointer ${
+                  assignMode === 'create_room' ? 'bg-white text-[#111]' : 'text-[#666]'
+                }`}
+              >
+                新建处理房间
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssignMode('append_room')}
+                className={`py-1.5 rounded-md font-medium cursor-pointer ${
+                  assignMode === 'append_room' ? 'bg-white text-[#111]' : 'text-[#666]'
+                }`}
+              >
+                追加到已有房间
+              </button>
+            </div>
+
+            {assignMode === 'create_room' ? (
+              <div className="space-y-2.5">
+                <div>
+                  <label className="block text-[#555] mb-1">协作策略</label>
+                  <select
+                    value={assignStrategyId}
+                    onChange={(e) => setAssignStrategyId(e.target.value as 'single' | 'open-channel' | 'roundtable')}
+                    className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                  >
+                    <option value="single">1v1 单聊 (single)</option>
+                    <option value="open-channel">开放协作群 (open-channel)</option>
+                    <option value="roundtable">圆桌讨论室 (roundtable)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[#555] mb-1">指派 Agent</label>
+                  <div className="max-h-32 overflow-y-auto border border-[#dcdcdc] rounded-lg divide-y divide-[#efefef]">
+                    {agents.map((a) => {
+                      const checked = assignAgentIds.includes(a.id)
+                      return (
+                        <label key={a.id} className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setAssignAgentIds((prev) =>
+                                prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id]
+                              )
+                            }
+                          />
+                          <span>{a.name}</span>
+                          <span className="font-mono text-[10px] text-[#888]">{a.driverKind}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[#555] mb-1">工作区（可选）</label>
+                  <select
+                    value={assignWorkspaceId}
+                    onChange={(e) => setAssignWorkspaceId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                  >
+                    <option value="">默认</option>
+                    {workspaces
+                      .filter((w) => w.kind === 'project')
+                      .map((w) => (
+                        <option key={w.id} value={w.id}>
+                          [项目] {w.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[#555] mb-1">选择已有房间</label>
+                <select
+                  value={assignRoomId}
+                  onChange={(e) => setAssignRoomId(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                >
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.title} ({r.strategyId})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <label className="flex items-center gap-1.5 text-amber-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={assignAllowWrite}
+                onChange={(e) => setAssignAllowWrite(e.target.checked)}
+              />
+              <ShieldAlert size={12} />
+              <span>允许修改工作区（不勾选则默认 Lockdown 只读防注入）</span>
+            </label>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setAssignTarget(null)} className="px-3 py-1.5 border border-[#dcdcdc] rounded-lg cursor-pointer">
+                取消
+              </button>
+              <button type="submit" className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                确认指派并启动
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,123 @@
+[
+  {
+    "name": "collab_dispatch",
+    "description": "Dispatch a subtask to another fixed roster member in this room, or transfer ownership of the current task.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["subtask", "transfer"],
+          "description": "subtask waits for child deliverables and resumes you; transfer hands off the task permanently."
+        },
+        "recipientMember": {
+          "type": "string",
+          "description": "Target member displayName or room_member_id from the fixed room roster."
+        },
+        "instruction": {
+          "type": "string",
+          "description": "Clear, self-contained instruction for the target member."
+        },
+        "expectedResult": {
+          "type": "string",
+          "description": "What output or artifact is expected back."
+        },
+        "workspaceMode": {
+          "type": "string",
+          "enum": ["read-only", "shared-rw", "worktree"],
+          "description": "Optional workspace mode for the dispatched node."
+        },
+        "inheritWorkspaceFromNodeId": {
+          "type": "string",
+          "description": "Optional workNodeId whose workspace (e.g. a coder's git worktree) should be reused by this node."
+        },
+        "resources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional exclusive resource lock keys."
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional predecessor workNodeIds that must complete first."
+        }
+      },
+      "required": ["mode", "recipientMember", "instruction", "expectedResult"]
+    }
+  },
+  {
+    "name": "collab_reply",
+    "description": "Ask a quick follow-up question to the author of a specific room message (accepts #m<seq> or messageId). The recipient gets one reply-only turn.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "description": "Target message ID or short ref such as #m12."
+        },
+        "text": {
+          "type": "string",
+          "description": "Short question or clarification request."
+        }
+      },
+      "required": ["messageId", "text"]
+    }
+  },
+  {
+    "name": "collab_publish",
+    "description": "Publish your official public response for this turn with an optional structured verdict.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Final public response text to post to the room."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["hold", "changed", "approve", "revise", "done"]
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "required": ["text"]
+    }
+  },
+  {
+    "name": "collab_history",
+    "description": "Read older visible messages in this room without triggering any agent.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "beforeSeq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    }
+  },
+  {
+    "name": "collab_remember",
+    "description": "Add or remove a persistent room-level shared memory item visible to all members.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Memory text to add or exact text/id to remove."
+        },
+        "action": {
+          "type": "string",
+          "enum": ["add", "remove"]
+        }
+      },
+      "required": ["text"]
+    }
+  }
+]

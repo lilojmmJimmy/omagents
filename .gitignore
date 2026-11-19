@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.vite/
+*.log
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+.myagents-dev/

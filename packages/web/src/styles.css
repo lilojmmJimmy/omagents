@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+:root {
+  --bg: #f8f8f8;
+  --surface: #ffffff;
+  --fill: rgba(0, 0, 0, 0.035);
+  --fill-2: rgba(0, 0, 0, 0.065);
+  --border: #e8e8e8;
+  --border-2: #d8d8d8;
+  --text: #0f0f0f;
+  --text-muted: #666666;
+  --text-3: #999999;
+  --accent: #c2542d;
+  --accent-bg: rgba(194, 84, 45, 0.1);
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.markdown-body pre {
+  background: #141414;
+  color: #f0f0f0;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-body :not(pre) > code {
+  background: var(--fill-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.markdown-body p {
+  margin: 6px 0;
+  line-height: 1.65;
+}
+
+.markdown-body ul, .markdown-body ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.markdown-body ul { list-style-type: disc; }
+.markdown-body ol { list-style-type: decimal; }
