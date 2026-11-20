@@ -2,7 +2,7 @@
 
 > **文档说明**：本文件为独立评审报告，不修改原 `01`~`05` 号设计文档。  
 > **评审基线**：[01-PRD-FEATURES.md](./01-PRD-FEATURES.md) · [02-ARCHITECTURE.md](./02-ARCHITECTURE.md) · [03-DOMAIN-DESIGN.md](./03-DOMAIN-DESIGN.md) · [04-API-PROTOCOL.md](./04-API-PROTOCOL.md) · [05-DATABASE-DESIGN.md](./05-DATABASE-DESIGN.md)  
-> **复用参考源**：`G:\000TempAIRead\antumi-main\antumi-main`（Antumi，Apache 2.0 许可）
+> **复用参考源**：[Antumi](https://github.com/flyhero/antumi)（Apache 2.0 许可）
 
 ---
 
@@ -370,7 +370,7 @@ stateDiagram-v2
 
 ## 4. Antumi 源码与设计复用评估
 
-已对 `G:\000TempAIRead\antumi-main\antumi-main` 完成代码盘点。
+已完成 Antumi（https://github.com/flyhero/antumi）代码盘点。
 
 ### 4.1 许可证与架构兼容性
 - **许可证**：**Apache License 2.0**（商用/修改/分发友好；复用文件时按协议保留原作者版权声明和 LICENSE，并标注修改即可）。
