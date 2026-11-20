@@ -1,8 +1,8 @@
 # MyAgents Project Status & Next-Phase Roadmap
 
-> **Current Baseline**: `v0.1c+` (`v0.1a` -> `v0.1b` -> `v0.1c` delivered, plus Codex CLI native resume / dynamic MCP / latest-turn wrap-up)  
+> **Current Baseline**: `v0.2a` (`T-201` & `T-202` delivered; `T-203` HITL deferred)  
 > **Updated**: `2026-11-19`  
-> **Scope**: Single entry point summarizing delivered capabilities, verified quality baseline, resolved engineering fixes, and the backlog entering `v0.2`.
+> **Scope**: Single entry point summarizing delivered capabilities, verified quality baseline, resolved engineering fixes, and the remaining backlog from `v0.1` tail through `v0.2b+`.
 
 ---
 
@@ -13,6 +13,7 @@ MyAgents is a server-side multi-agent orchestration middleware and React web wor
 1. **Dual-Track Single-Agent Execution & Hot-Restart Survival (`v0.1a`)**
 2. **5-Layer Agent Isolation, Deadlock-Free `open-channel` Collaboration & Git Worktree Isolation (`v0.1b`)**
 3. **Pregel Super-step `roundtable`, Unified Inbox / Webhooks / `SourcePlugin` Lockdown, and Full `CodexCliDriver` Support (`v0.1c+`)**
+4. **External MCP Servers, Skill Registry, and Background Jobs / Cron Scheduler (`v0.2a`, `T-201` & `T-202`)**
 
 ---
 
@@ -44,19 +45,34 @@ MyAgents is a server-side multi-agent orchestration middleware and React web wor
   - `AcpCliDriver`: `closeStdin: true`, `permissionMode: 'read-only'` enforcement, and single-chat `[Conversation History]` fallback in `combinePrompt`.
 - **Latest-Turn Failure Tracking**: `pickLatestRetryableNode` (`packages/protocol/src/room.ts`) and scoped `RoomDetail.hasFailedNode` (`collab-engine.ts`) ensure retry banners and sidebar error indicators clear once newer turns succeed.
 
-### 2.5 Directory Overview
+### 2.5 Stage 4: `v0.2a` Ecosystem Extensions & Background Scheduler (`T-201`, `T-202`)
+- **SQLite Migration `v4` (`0004_v02a_cron_schedules`)**: Added `scheduled_jobs` table (`cron_expr`, `next_run_at`, `last_run_at`, `last_job_id`, `last_error`) and due-scan indexes (`idx_scheduled_jobs_due`, `idx_background_jobs_due`) while deferring `T-203` HITL wiring.
+- **T-201 External MCP Servers & Skill Registry (`extensions.ts`, `mcp-client.ts`, `mcp-registry.ts`, `skill-registry.ts`)**:
+  - Added `McpClient` supporting both `stdio` (via `planLaunch` + `createNdjsonParser`) and Streamable HTTP (`json` / SSE responses, `Mcp-Session-Id`) with `initialize`, `notifications/initialized`, paginated `listTools`, and `callTool`.
+  - Added `McpRegistryService` with secret masking (`envKeys` / `headerKeys` instead of returning secrets over RPC), reserved name `'myagents'` guard, agent cascade cleanup on delete, live `probe`, and `writeRoomMemberMcpConfig` external server merging alongside collab tools.
+  - Added `SkillRegistryService` for `local` paths and `git` repositories (cloned via `planLaunch`, commit hash pinning, safe `resolveContainedPath` cleanup, bounded `loadPromptSection` with 12-char `skillsHash` drift detection).
+  - Wired multi-driver runtime injection across `BuiltinDriver` (external MCP tool execution bridged as `mcp__<server>__<tool>` + `Redactor` secret scrubbing), `ClaudeCodeDriver` (`--append-system-prompt` + merged MCP config), and `CodexCliDriver` (`combinePrompt` skills block + dynamic `-c mcp_servers.*` flags including `http_headers`), enforcing zero external MCP exposure in `lockdown` isolation mode.
+  - Added [ExtensionsView.tsx](../packages/web/src/components/ExtensionsView.tsx) and capability checkboxes / inline editor in [AgentsView.tsx](../packages/web/src/components/AgentsView.tsx).
+- **T-202 Background Jobs & Cron Scheduler (`cron.ts`, `job-scheduler.ts`, `builtin-handlers.ts`)**:
+  - Added 5-field cron parser and next-run calculator (`computeNextCronRun`) validating field bounds and rejecting impossible wildcard calendar dates (e.g. Feb 31).
+  - Added `JobSchedulerService` with startup crash recovery (`running -> pending`), transactional due schedule materialization (`sched:<id>:<next_run_at>` idempotency key), atomic job claiming, exponential backoff retries, terminal failure propagation to `scheduled_jobs.last_error`, and manual `triggerScheduleNow`.
+  - Registered built-in handlers: `sync_source` (pull-based `SourcePlugin` ingestion), `routine_tick` (scheduled single-agent check defaulting to `read-only` unless `allowWrite: true`), and `backup_snapshot` (consistent SQLite `VACUUM INTO` snapshots + configurable retention pruning).
+  - Wired RPC endpoints (`jobs.*`, `schedules.*`), real-time WebSocket `jobs.updated` notifications, and [JobsView.tsx](../packages/web/src/components/JobsView.tsx).
+
+### 2.6 Directory Overview
 
 | Path | Responsibility |
 | --- | --- |
-| `packages/protocol/src/` | Zod schemas (`models.ts`, `room.ts`, `collab.ts`, `inbox.ts`, `rpc.ts`) and Node utilities (`node/`) |
+| `packages/protocol/src/` | Zod schemas (`models.ts`, `room.ts`, `collab.ts`, `inbox.ts`, `extensions.ts`, `rpc.ts`) and Node utilities (`node/`) |
 | `packages/plugin-sdk/src/` | Extension SPI (`SourcePlugin`, `InboundEnvelope`, `PluginContext`, `StrategyPlugin`) |
 | `packages/daemon/src/` | Thin detached PTY/pipe session host (`pipe-session.ts`, `pty-session.ts`, `session-host.ts`) |
 | `packages/core/src/collab/` | `CollabEngine`, strategies (`single`, `open-channel`, `roundtable`), `context-builder.ts`, `rw-lock.ts` |
 | `packages/core/src/inbox/` | `InboxService`, `PluginManager` (`generic-webhook`, `github-webhook`) |
-| `packages/core/src/runtime/` | `BuiltinDriver`, `ClaudeCodeDriver`, `CodexCliDriver`, `AcpCliDriver`, `AgentEnvironmentIsolator`, `EnvCheckService` |
-| `packages/core/src/mcp/` | `collab-tools.json`, `mcp-bridge.mjs`, `mcp-config.ts` |
+| `packages/core/src/jobs/` | `cron.ts`, `JobSchedulerService`, `registerBuiltInJobHandlers` (`sync_source`, `routine_tick`, `backup_snapshot`) |
+| `packages/core/src/runtime/` | `BuiltinDriver`, `ClaudeCodeDriver`, `CodexCliDriver`, `AcpCliDriver`, `AgentEnvironmentIsolator`, `SkillRegistryService`, `EnvCheckService` |
+| `packages/core/src/mcp/` | `collab-tools.json`, `mcp-bridge.mjs`, `mcp-config.ts`, `mcp-client.ts`, `McpRegistryService` |
 | `packages/core/src/workspace/` | `WorkspaceService`, `WorktreeService`, `GitService`, `TerminalService`, `path-guard.ts` |
-| `packages/core/src/storage/` | `CoreDatabase` (`node:sqlite` WAL + forward migrations v1-v3) |
+| `packages/core/src/storage/` | `CoreDatabase` (`node:sqlite` WAL + forward migrations `v1`-`v4`) |
 | `packages/core/src/security/` | `AuthService` and extension hooks (`hooks.ts`) |
 | `packages/core/src/transport/` | Fastify HTTP server (`/webhooks` raw scope) and WS `/rpc` router |
 | `packages/web/src/` | React 19 workbench (`App.tsx`, `store/app-store.ts`, `components/`) |
@@ -67,14 +83,14 @@ MyAgents is a server-side multi-agent orchestration middleware and React web wor
 
 ## 3. Verified Quality Baseline
 
-Latest verification results after all `v0.1c+` wrap-up changes:
+Latest verification results after `v0.2a` (`T-201` & `T-202`) implementation:
 
 | Check | Outcome | Notes |
 | --- | --- | --- |
-| **`pnpm run build`** | **Passed (exit `0`)** | Vite v6.4.6 web bundle (`1863 modules`) + `tsc -p .` across all 5 packages (`protocol`, `plugin-sdk`, `daemon`, `web`, `core`) |
-| **`pnpm test`** | **Passed (`12` files / `42` tests, `0` skipped)** | Covers `e2e`, `acceptance`, `open-channel`, `roundtable`, `latest-turn`, `inbox`, `worktree`, `environment-isolator`, `cli-drivers` (unit + real daemon integration), `claude-driver`, `path-guard`, `rw-lock` |
+| **`pnpm run build`** | **Passed (exit `0`)** | Vite v6.4.6 web bundle (`1866 modules`) + `tsc -p .` across all 5 packages (`protocol`, `plugin-sdk`, `daemon`, `web`, `core`) |
+| **`pnpm test`** | **Passed (`15` files / `50` tests, `0` skipped)** | Covers all `v0.1` suites (`e2e`, `acceptance`, `open-channel`, `roundtable`, `latest-turn`, `inbox`, `worktree`, `environment-isolator`, `cli-drivers`, `claude-driver`, `path-guard`, `rw-lock`) plus `mcp-registry`, `skill-registry`, and `job-scheduler` |
+| **`node scripts/smoke.mjs`** | **Passed (exit `0`)** | Verified isolated production `core` + `daemon` startup, `HEALTH` (`ok: true`, `daemonConnected: true`), and `WEB_STATUS: 200 HAS_TITLE: true` |
 | **Isolated Live `codex-cli 0.170.0` Verification** | **Passed (exit `0`)** | Verified 2-turn native `exec resume` (`thread_id` recall) and dynamic `-c mcp_servers.myagents.*` discovery against `mcp-bridge.mjs` in an isolated non-git temp workspace |
-| **Prior `v0.1c` Checks** | **Passed** | `node scripts/smoke.mjs`, `verify-claude-v01b-live.mjs --mock-anthropic`, and headless Web UI verification documented in [V0.1C-TEST-REPORT.md](./V0.1C-TEST-REPORT.md) |
 
 ---
 
@@ -92,11 +108,11 @@ Latest verification results after all `v0.1c+` wrap-up changes:
 
 ### 4.2 Group B: `v0.2a` Ecosystem & Governance Mainline
 
-| ID | Priority | Task | Reserved Infra | Scope & Acceptance Criteria |
-| --- | :---: | :--- | :--- | :--- |
-| **T-201** | P0 | **External MCP Servers & Skill Registry** | `mcp_servers`, `skills` tables; `Agent.mcpServerIds / skillIds`; `writeRoomMemberMcpConfig` | CRUD/RPC and Web UI for external MCP servers (`stdio` / `http`, blocking reserved name `myagents`) and local/Git skills; inject merged configs at runtime into `BuiltinDriver`, `ClaudeCodeDriver`, and `CodexCliDriver` |
-| **T-202** | P0 | **Background Jobs & Cron Scheduler** | `background_jobs` table (`sync_source`, `backup_snapshot`, `routine_tick`) | Unified background job runner + cron scheduler (`run_after`, idempotency keys, exponential backoff retries) powering pull-based `SourcePlugin` sync, scheduled routines, and attachment outbox GC (`T-101`) |
-| **T-203** | P1 | **Human-in-the-Loop Tool Approval (HITL)** | `approval_requests` table; `ApprovalGate` SPI ([hooks.ts](../packages/core/src/security/hooks.ts)) | Pause `WorkNode` into `awaiting_human` on policy-matched high-risk actions, persist `approval_requests`, push WebSocket prompt to Web UI, and resume/deny execution upon user decision |
+| ID | Priority | Status | Task | Reserved Infra | Scope & Acceptance Criteria |
+| --- | :---: | :---: | :--- | :--- | :--- |
+| **T-201** | P0 | **Delivered** | **External MCP Servers & Skill Registry** | `mcp_servers`, `skills`, `Agent.mcpServerIds / skillIds` | CRUD/RPC and Web UI for external MCP servers (`stdio` / `http`, blocking reserved name `myagents`, secret masking) and local/Git skills (`pinnedCommit`, bounded prompt + `skillsHash`); injects merged configs across `BuiltinDriver`, `ClaudeCodeDriver`, and `CodexCliDriver` (blocked in `lockdown`) |
+| **T-202** | P0 | **Delivered** | **Background Jobs & Cron Scheduler** | `background_jobs`, `scheduled_jobs` (`v4`) | Unified background job runner + 5-field cron scheduler (`run_after`, idempotency keys, exponential backoff retries, startup recovery) with built-in handlers (`sync_source`, `routine_tick`, `backup_snapshot` via `VACUUM INTO`) and Web UI |
+| **T-203** | P1 | **Deferred / Open** | **Human-in-the-Loop Tool Approval (HITL)** | `approval_requests` table; `ApprovalGate` SPI ([hooks.ts](../packages/core/src/security/hooks.ts)) | Deferred out of the initial `v0.2a` batch: pause `WorkNode` into `awaiting_human` on policy-matched high-risk actions, persist `approval_requests`, push WebSocket prompt to Web UI, and resume/deny execution upon user decision |
 
 ### 4.3 Group C: `v0.2b+` Channels & Operations
 
@@ -104,7 +120,7 @@ Latest verification results after all `v0.1c+` wrap-up changes:
 | --- | :---: | :--- | :--- |
 | **T-301** | P2 | **Additional Inbound/Outbound Channel Plugins** | Extend [plugin-sdk](../packages/plugin-sdk/src/index.ts) `SourcePlugin` for Email (IMAP/SMTP), Lark/Feishu, DingTalk, Slack, and Jira |
 | **T-302** | P2 | **Global Usage & Cost Analytics Dashboard** | Aggregate `work_nodes.usage_json` across rooms, agents, models, and time windows |
-| **T-303** | P2 | **Consistent Async Backups (`VACUUM INTO` / S3)** | Scheduled SQLite WAL snapshots via `background_jobs.backup_snapshot` to local archives or S3-compatible storage |
+| **T-303** | P2 | **Consistent Async Backups (S3 / Off-site Sync)** | Local `VACUUM INTO` SQLite WAL snapshots + retention pruning shipped in **T-202**; add S3-compatible off-site archive upload and checksum verification in `v0.2b+` |
 | **T-304** | P3 | **Managed Browser Tool & Multi-User RBAC** | Controlled browser automation tool and multi-user role-based access control + audit trail |
 
 ---
