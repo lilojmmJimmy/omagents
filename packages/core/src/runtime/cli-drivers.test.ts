@@ -12,8 +12,10 @@ import {
   buildCodexArgs,
   CodexCliDriver,
   combinePrompt,
+  loadCodexMcpConfigArgs,
   parseAcpEventLine,
-  parseCodexEventLine
+  parseCodexEventLine,
+  serializeCodexMcpConfigArgs
 } from './cli-drivers'
 import type { TurnInput } from './driver'
 
@@ -152,6 +154,144 @@ describe('CodexCliDriver & AcpCliDriver helpers', () => {
     expect(argsFull).not.toContain('--full-auto')
     expect(argsFull).not.toContain('--sandbox')
     expect(argsFull[argsFull.length - 1]).toBe('-')
+
+    const argsResumeRo = buildCodexArgs(
+      makeTurnInput({
+        agent: { ...makeTurnInput().agent, isolationMode: 'isolated-home' }
+      }),
+      { resumeSessionId: 'thread-123' }
+    )
+    expect(argsResumeRo.slice(0, 4)).toEqual(['exec', 'resume', '--json', '--skip-git-repo-check'])
+    expect(argsResumeRo).toContain('sandbox_mode="read-only"')
+    expect(argsResumeRo).not.toContain('--sandbox')
+    expect(argsResumeRo).toContain('--ignore-user-config')
+    expect(argsResumeRo).toContain('--ignore-rules')
+    expect(argsResumeRo.slice(-2)).toEqual(['thread-123', '-'])
+
+    const argsResumeRw = buildCodexArgs(
+      makeTurnInput({
+        workspaceMode: 'shared-rw',
+        isolation: standardIsolation,
+        agent: { ...makeTurnInput().agent, permissionMode: 'workspace-write' }
+      }),
+      { resumeSessionId: 'thread-456' }
+    )
+    expect(argsResumeRw).toContain('sandbox_mode="workspace-write"')
+    expect(argsResumeRw).not.toContain('--ignore-user-config')
+    expect(argsResumeRw.slice(-2)).toEqual(['thread-456', '-'])
+
+    const argsLockdown = buildCodexArgs(
+      makeTurnInput({
+        isolation: { ...standardIsolation, level: 'lockdown' }
+      })
+    )
+    expect(argsLockdown).toContain('--sandbox')
+    expect(argsLockdown).toContain('read-only')
+    expect(argsLockdown).toContain('--ignore-user-config')
+    expect(argsLockdown).toContain('--ignore-rules')
+  })
+
+  it('serializeCodexMcpConfigArgs & loadCodexMcpConfigArgs handle stdio, http, and unsafe keys', () => {
+    const args = serializeCodexMcpConfigArgs({
+      myagents: {
+        command: 'D:\\nodejs\\node.exe',
+        args: ['G:\\bridge.mjs', '--room', 'r1'],
+        env: { GOOD_KEY: 'val', 'BAD-KEY': 'skip' }
+      },
+      remote: { url: 'https://mcp.example.com/sse' },
+      'bad.name': { command: 'node' }
+    })
+    expect(args).toEqual([
+      '-c',
+      'mcp_servers.myagents.command="D:\\\\nodejs\\\\node.exe"',
+      '-c',
+      'mcp_servers.myagents.args=["G:\\\\bridge.mjs","--room","r1"]',
+      '-c',
+      'mcp_servers.myagents.env.GOOD_KEY="val"',
+      '-c',
+      'mcp_servers.remote.url="https://mcp.example.com/sse"'
+    ])
+    expect(loadCodexMcpConfigArgs(path.join(os.tmpdir(), 'does-not-exist-mcp.json'))).toEqual([])
+    expect(loadCodexMcpConfigArgs(undefined)).toEqual([])
+  })
+
+  it('combinePrompt handles resume mode, single-chat history fallback, and multi-agent transcript dedup', () => {
+    const base = makeTurnInput({
+      instruction: 'What is my name?',
+      historyMessages: [
+        {
+          id: 'h1',
+          roomId: 'r1',
+          seq: 1,
+          visibleSeq: 1,
+          authorKind: 'human',
+          authorId: 'admin',
+          authorName: 'admin',
+          kind: 'chat',
+          content: 'My name is Alice.',
+          attachments: [],
+          replyToMsgId: null,
+          workNodeId: null,
+          visibilityScope: 'public',
+          visibleTo: [],
+          meta: {},
+          createdAt: 1
+        },
+        {
+          id: 'h2',
+          roomId: 'r1',
+          seq: 2,
+          visibleSeq: 2,
+          authorKind: 'agent',
+          authorId: 'm1',
+          authorName: 'Worker',
+          kind: 'chat',
+          content: 'Nice to meet you, Alice.',
+          attachments: [],
+          replyToMsgId: null,
+          workNodeId: null,
+          visibilityScope: 'public',
+          visibleTo: [],
+          meta: {},
+          createdAt: 2
+        },
+        {
+          id: 'h3',
+          roomId: 'r1',
+          seq: 3,
+          visibleSeq: 3,
+          authorKind: 'human',
+          authorId: 'admin',
+          authorName: 'admin',
+          kind: 'chat',
+          content: 'What is my name?',
+          attachments: [],
+          replyToMsgId: null,
+          workNodeId: null,
+          visibilityScope: 'public',
+          visibleTo: [],
+          meta: {},
+          createdAt: 3
+        }
+      ]
+    })
+
+    const resumedPrompt = combinePrompt(base, { isResume: true })
+    expect(resumedPrompt).not.toContain('[System Context]')
+    expect(resumedPrompt).not.toContain('[Conversation History]')
+    expect(resumedPrompt).toContain('READ-ONLY workspace access')
+    expect(resumedPrompt).toContain('What is my name?')
+
+    const freshPrompt = combinePrompt(base, { isResume: false })
+    expect(freshPrompt).toContain('[System Context]\nBe concise.')
+    expect(freshPrompt).toContain('[Conversation History]\n[admin]: My name is Alice.\n[Worker]: Nice to meet you, Alice.')
+    expect(freshPrompt.match(/What is my name\?/g)?.length).toBe(1)
+
+    const multiAgentPrompt = combinePrompt({
+      ...base,
+      systemContextPrompt: '# Collaboration Room\n\n## Visible Room Transcript (recent)\n#m1 [admin]: hi'
+    })
+    expect(multiAgentPrompt).not.toContain('[Conversation History]')
   })
 
   it('parseCodexEventLine parses reasoning, agent text, command execution, file_change, mcp_tool_call, error, turn.failed, and usage', () => {
@@ -260,6 +400,9 @@ describe('CodexCliDriver & AcpCliDriver helpers', () => {
       }
     })
 
+    expect(parseCodexEventLine(JSON.stringify({ type: 'thread.started', thread_id: 'th-123' }))).toEqual({
+      nativeSessionId: 'th-123'
+    })
     expect(parseCodexEventLine(JSON.stringify({ type: 'error', message: 'rate limit' }))).toEqual({
       errorText: 'rate limit'
     })
@@ -357,6 +500,7 @@ describe('CodexCliDriver & AcpCliDriver daemon integration', () => {
   let daemonProc: ChildProcess
   let daemon: DaemonClient
   let fakeCodexCmd: string
+  let fakeResumeCmd: string
   let fakeAcpCmd: string
   let fakeFailCmd: string
 
@@ -386,6 +530,34 @@ process.stdin.on('end', () => {
     type: 'turn.completed',
     usage: { input_tokens: 10, cached_input_tokens: 2, output_tokens: 5, reasoning_output_tokens: 3 }
   }))
+  process.exit(0)
+})
+`
+    )
+
+    fakeResumeCmd = createFakeCliCommand(
+      tmpDir,
+      'fake-resume',
+      `
+let stdin = ''
+process.stdin.setEncoding('utf8')
+process.stdin.on('data', (chunk) => { stdin += chunk })
+process.stdin.on('end', () => {
+  const args = process.argv.slice(2)
+  if (args.includes('resume') && args.includes('missing-thread')) {
+    process.stderr.write('thread not found: missing-thread\\n')
+    process.exit(1)
+  }
+  const tid = args.includes('resume') ? 'thread-abc' : 'thread-abc'
+  process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: tid }) + '\\n')
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: { id: 'm1', type: 'agent_message', text: JSON.stringify({ args, stdin }) }
+  }) + '\\n')
+  process.stdout.write(JSON.stringify({
+    type: 'turn.completed',
+    usage: { input_tokens: 5, cached_input_tokens: 0, output_tokens: 2 }
+  }) + '\\n')
   process.exit(0)
 })
 `
@@ -518,5 +690,103 @@ process.exit(2)
         workspace: { ...base.workspace, rootPath: workDir }
       })
     ).rejects.toThrow(/exited with code 2.*fatal fast error from cli/)
+  }, 5000)
+
+  it('CodexCliDriver persists thread_id and uses exec resume with incremental prompt on turn 2', async () => {
+    const driver = new CodexCliDriver(daemon)
+    const base = makeTurnInput()
+    let savedNativeId: string | null = null
+    let savedConfigHash: string | null = null
+
+    const turn1 = await driver.runTurn({
+      ...base,
+      agent: { ...base.agent, driverConfig: { cliPath: fakeResumeCmd } },
+      workspace: { ...base.workspace, rootPath: workDir },
+      instruction: 'First turn prompt',
+      onSessionUpdate: (patch) => {
+        if (patch.nativeSessionId !== undefined) savedNativeId = patch.nativeSessionId
+        if (patch.configHash !== undefined) savedConfigHash = patch.configHash
+      }
+    })
+    expect(turn1.nativeSessionId).toBe('thread-abc')
+    expect(savedNativeId).toBe('thread-abc')
+    expect(savedConfigHash).toBe(base.configHash)
+
+    const turn2 = await driver.runTurn({
+      ...base,
+      session: {
+        ...base.session,
+        nativeSessionId: savedNativeId,
+        configHash: savedConfigHash
+      },
+      agent: { ...base.agent, driverConfig: { cliPath: fakeResumeCmd } },
+      workspace: { ...base.workspace, rootPath: workDir },
+      instruction: 'Follow-up turn'
+    })
+
+    const payload = JSON.parse(turn2.finalText) as { args: string[]; stdin: string }
+    expect(payload.args.slice(0, 4)).toEqual(['exec', 'resume', '--json', '--skip-git-repo-check'])
+    expect(payload.args.slice(-2)).toEqual(['thread-abc', '-'])
+    expect(payload.stdin).not.toContain('[System Context]')
+    expect(payload.stdin).toContain('Follow-up turn')
+  }, 5000)
+
+  it('CodexCliDriver falls back to fresh exec when resume reports missing thread', async () => {
+    const driver = new CodexCliDriver(daemon)
+    const base = makeTurnInput()
+    const updates: Array<string | null | undefined> = []
+
+    const output = await driver.runTurn({
+      ...base,
+      session: {
+        ...base.session,
+        nativeSessionId: 'missing-thread',
+        configHash: base.configHash
+      },
+      agent: { ...base.agent, driverConfig: { cliPath: fakeResumeCmd } },
+      workspace: { ...base.workspace, rootPath: workDir },
+      instruction: 'Recover fresh',
+      onSessionUpdate: (patch) => {
+        if ('nativeSessionId' in patch) updates.push(patch.nativeSessionId)
+      }
+    })
+
+    const payload = JSON.parse(output.finalText) as { args: string[]; stdin: string }
+    expect(payload.args[0]).toBe('exec')
+    expect(payload.args).not.toContain('resume')
+    expect(payload.stdin).toContain('[System Context]\nBe concise.')
+    expect(payload.stdin).toContain('Recover fresh')
+    expect(updates).toContain(null)
+    expect(output.nativeSessionId).toBe('thread-abc')
+  }, 5000)
+
+  it('CodexCliDriver injects dynamic MCP server overrides from mcpConfigPath', async () => {
+    const driver = new CodexCliDriver(daemon)
+    const base = makeTurnInput()
+    const mcpPath = path.join(tmpDir, 'mcp-config.json')
+    writeFileSync(
+      mcpPath,
+      JSON.stringify({
+        mcpServers: {
+          myagents: {
+            command: process.execPath,
+            args: ['G:\\bridge.mjs', '--room', 'r1', '--member', 'm1']
+          }
+        }
+      }),
+      'utf8'
+    )
+
+    const output = await driver.runTurn({
+      ...base,
+      mcpConfigPath: mcpPath,
+      agent: { ...base.agent, driverConfig: { cliPath: fakeResumeCmd } },
+      workspace: { ...base.workspace, rootPath: workDir },
+      instruction: 'Check MCP args'
+    })
+
+    const payload = JSON.parse(output.finalText) as { args: string[]; stdin: string }
+    expect(payload.args).toContain(`mcp_servers.myagents.command=${JSON.stringify(process.execPath)}`)
+    expect(payload.args).toContain('mcp_servers.myagents.args=["G:\\\\bridge.mjs","--room","r1","--member","m1"]')
   }, 5000)
 })

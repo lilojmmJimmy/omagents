@@ -1564,13 +1564,17 @@ export class CollabEngine {
       }
 
       const allowedCollabTools = strategy?.allowedTools ?? []
+      const isLockdown = agent.isolationMode === 'lockdown' || row.source_trust_level === 'untrusted'
+      const mcpAllowedTools = isLockdown
+        ? allowedCollabTools.filter((t) => t === 'collab_history' || t === 'collab_publish')
+        : allowedCollabTools
       let mcpConfigPath: string | undefined
       let mcpConfigHash: string | undefined
-      if (allowedCollabTools.length > 0 && agent.driverKind !== 'builtin') {
+      if (mcpAllowedTools.length > 0 && agent.driverKind !== 'builtin') {
         const mcpInfo = writeRoomMemberMcpConfig({
           roomId: row.room_id,
           memberId: row.assignee_member_id,
-          allowedTools: allowedCollabTools
+          allowedTools: mcpAllowedTools
         })
         mcpConfigPath = mcpInfo.configPath
         mcpConfigHash = mcpInfo.configHash
@@ -1626,8 +1630,9 @@ export class CollabEngine {
         .all(row.id) as unknown as DeliveryRow[]
       const pendingDeliveryText = deliveryRows.map((d) => d.payload_text).join('\n\n---\n\n')
       const isIncremental =
-        agent.driverKind !== 'builtin' &&
-        Boolean(session.daemonSessionId && session.nativeSessionId && session.configHash === configHash && session.lastDeliveredSeq > 0)
+        driver.capabilities.supportsNativeResume &&
+        Boolean(session.nativeSessionId && session.configHash === configHash && session.lastDeliveredSeq > 0) &&
+        (agent.driverKind !== 'claude' || Boolean(session.daemonSessionId))
 
       const latestNodeObj = mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow)
       const turnContext = buildTurnContext({

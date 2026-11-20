@@ -1,9 +1,40 @@
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import type { DriverCapabilities, TurnUsage } from '@myagents/protocol'
 import { DAEMON_PROTOCOL_VERSION, type DaemonEvent } from '@myagents/protocol/node'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client'
 import { Errors } from '../errors'
 import type { AgentDriver, SessionRecord, TurnInput, TurnOutput } from './driver'
+
+const CodexMcpServerEntrySchema = z.object({
+  command: z.string().min(1).optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  url: z.string().min(1).optional()
+})
+export type CodexMcpServerEntry = z.infer<typeof CodexMcpServerEntrySchema>
+
+const McpConfigFileSchema = z.object({
+  mcpServers: z.record(CodexMcpServerEntrySchema).default({})
+})
+
+const SAFE_TOML_KEY_RE = /^[A-Za-z0-9_-]+$/
+const SAFE_ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+const MAX_FALLBACK_HISTORY_CHARS = 24_000
+const MISSING_THREAD_ERR_RE =
+  /session.*not found|thread.*not found|no rollout found|failed to resume|could not find.*thread/i
+
+type ParsedCliEvent = {
+  textDelta?: string
+  thinkingDelta?: string
+  toolStart?: { id: string; name: string; input?: unknown }
+  toolResult?: { id: string; name: string; output?: string; isError?: boolean }
+  usage?: TurnUsage
+  errorText?: string
+  done?: boolean
+  nativeSessionId?: string
+} | null
 
 function isReadOnlyTurn(input: TurnInput): boolean {
   return (
@@ -13,29 +44,108 @@ function isReadOnlyTurn(input: TurnInput): boolean {
   )
 }
 
-export function combinePrompt(input: TurnInput): string {
-  const parts = [input.agent.systemPrompt?.trim(), input.systemContextPrompt?.trim()].filter(Boolean)
-  const prefix = parts.length > 0 ? `[System Context]\n${parts.join('\n\n')}\n\n` : ''
+function formatHistoryBlock(input: TurnInput): string {
+  if (input.historyMessages.length === 0) return ''
+  // Multi-agent first turns already embed the room transcript inside systemContextPrompt.
+  if (input.systemContextPrompt?.includes('## Visible Room Transcript')) return ''
+
+  const trimmedInstruction = input.instruction.trim()
+  const msgs = [...input.historyMessages]
+  const tail = msgs[msgs.length - 1]
+  if (tail && tail.authorKind === 'human' && tail.content.trim() === trimmedInstruction) {
+    msgs.pop()
+  }
+  if (msgs.length === 0) return ''
+
+  const rendered: string[] = []
+  let budget = MAX_FALLBACK_HISTORY_CHARS
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]!
+    const line = `[${m.authorName}]: ${m.content}`
+    if (budget - line.length < 0 && rendered.length > 0) break
+    rendered.unshift(line)
+    budget -= line.length + 1
+  }
+  return rendered.length > 0 ? `[Conversation History]\n${rendered.join('\n')}\n\n` : ''
+}
+
+export function combinePrompt(input: TurnInput, opts?: { isResume?: boolean }): string {
   const guard = isReadOnlyTurn(input)
     ? '[Constraint: READ-ONLY workspace access. Do NOT edit files or run mutating commands.]\n\n'
     : ''
-  return `${prefix}${guard}${input.instruction}`
+  if (opts?.isResume) {
+    return `${guard}${input.instruction}`
+  }
+  const parts = [input.agent.systemPrompt?.trim(), input.systemContextPrompt?.trim()].filter(Boolean)
+  const prefix = parts.length > 0 ? `[System Context]\n${parts.join('\n\n')}\n\n` : ''
+  const history = formatHistoryBlock(input)
+  return `${prefix}${history}${guard}${input.instruction}`
 }
 
-export function buildCodexArgs(input: TurnInput): string[] {
+export function serializeCodexMcpConfigArgs(mcpServers: Record<string, CodexMcpServerEntry>): string[] {
+  const args: string[] = []
+  for (const [name, entry] of Object.entries(mcpServers)) {
+    if (!SAFE_TOML_KEY_RE.test(name)) continue
+    if (entry.command) {
+      args.push('-c', `mcp_servers.${name}.command=${JSON.stringify(entry.command)}`)
+      if (entry.args && entry.args.length > 0) {
+        args.push('-c', `mcp_servers.${name}.args=${JSON.stringify(entry.args)}`)
+      }
+      if (entry.env) {
+        for (const [envKey, envVal] of Object.entries(entry.env)) {
+          if (!SAFE_ENV_KEY_RE.test(envKey)) continue
+          args.push('-c', `mcp_servers.${name}.env.${envKey}=${JSON.stringify(envVal)}`)
+        }
+      }
+    } else if (entry.url) {
+      args.push('-c', `mcp_servers.${name}.url=${JSON.stringify(entry.url)}`)
+    }
+  }
+  return args
+}
+
+export function loadCodexMcpConfigArgs(mcpConfigPath?: string): string[] {
+  if (!mcpConfigPath?.trim()) return []
+  try {
+    const raw = readFileSync(mcpConfigPath, 'utf8')
+    const parsed = McpConfigFileSchema.safeParse(JSON.parse(raw))
+    return parsed.success ? serializeCodexMcpConfigArgs(parsed.data.mcpServers) : []
+  } catch {
+    return []
+  }
+}
+
+export function buildCodexArgs(input: TurnInput, opts?: { resumeSessionId?: string | null }): string[] {
   const readOnly = isReadOnlyTurn(input)
-  const args: string[] = ['exec', '--json', '--skip-git-repo-check']
+  const resumeId = opts?.resumeSessionId?.trim() || null
+  const args: string[] = resumeId
+    ? ['exec', 'resume', '--json', '--skip-git-repo-check']
+    : ['exec', '--json', '--skip-git-repo-check']
+
   if (input.agent.driverConfig.model?.trim()) {
     args.push('--model', input.agent.driverConfig.model.trim())
   }
+
+  // `codex exec resume` rejects `--sandbox`, so pass `sandbox_mode` via `-c` when resuming.
   if (readOnly) {
-    args.push('--sandbox', 'read-only')
+    if (resumeId) args.push('-c', 'sandbox_mode="read-only"')
+    else args.push('--sandbox', 'read-only')
   } else if (input.agent.permissionMode === 'full') {
     args.push('--dangerously-bypass-approvals-and-sandbox')
   } else {
-    args.push('--sandbox', 'workspace-write')
+    if (resumeId) args.push('-c', 'sandbox_mode="workspace-write"')
+    else args.push('--sandbox', 'workspace-write')
   }
-  args.push('-')
+
+  if (input.agent.isolationMode !== 'standard' || input.isolation.level === 'lockdown') {
+    args.push('--ignore-user-config', '--ignore-rules')
+  }
+
+  const mcpConfigPath = input.mcpConfigPath || input.isolation.mcpConfigPath
+  args.push(...loadCodexMcpConfigArgs(mcpConfigPath))
+
+  if (resumeId) args.push(resumeId, '-')
+  else args.push('-')
   return args
 }
 
@@ -46,6 +156,7 @@ export function parseCodexEventLine(rawLine: string): {
   toolResult?: { id: string; name: string; output?: string; isError?: boolean }
   usage?: TurnUsage
   errorText?: string
+  nativeSessionId?: string
 } | null {
   let frame: Record<string, unknown>
   try {
@@ -54,6 +165,9 @@ export function parseCodexEventLine(rawLine: string): {
     return null
   }
   const type = String(frame.type || '')
+  if (type === 'thread.started' && typeof frame.thread_id === 'string' && frame.thread_id) {
+    return { nativeSessionId: frame.thread_id }
+  }
   if (type === 'error' && typeof frame.message === 'string') {
     return { errorText: frame.message }
   }
@@ -228,7 +342,7 @@ async function runOneShotStreamCli(opts: {
   stdinData?: string
   closeStdin?: boolean
   input: TurnInput
-  parseLine: (line: string) => ReturnType<typeof parseAcpEventLine>
+  parseLine: (line: string) => ParsedCliEvent
 }): Promise<TurnOutput> {
   if (opts.input.abortSignal.aborted) {
     throw new Error('aborted')
@@ -250,6 +364,7 @@ async function runOneShotStreamCli(opts: {
     let stderrBuf = ''
     let textBuf = ''
     let latestUsage: TurnUsage | undefined
+    let nativeSessionId: string | undefined = opts.input.session.nativeSessionId ?? undefined
     let firstFrame = false
 
     const cleanup = () => {
@@ -273,6 +388,7 @@ async function runOneShotStreamCli(opts: {
       cleanup()
       resolve({
         finalText: textBuf.trim() || '(Completed)',
+        ...(nativeSessionId ? { nativeSessionId } : {}),
         usage: {
           ...latestUsage,
           durationMs: latestUsage?.durationMs ?? Math.max(0, Date.now() - startedAt)
@@ -307,6 +423,10 @@ async function runOneShotStreamCli(opts: {
       if (!line || settled) return
       const parsed = opts.parseLine(line)
       if (!parsed) return
+      if (parsed.nativeSessionId) {
+        nativeSessionId = parsed.nativeSessionId
+        opts.input.onSessionUpdate({ nativeSessionId, configHash: opts.input.configHash })
+      }
       if (parsed.thinkingDelta) {
         opts.input.emit({ kind: 'thinking', delta: parsed.thinkingDelta })
       }
@@ -392,10 +512,10 @@ async function runOneShotStreamCli(opts: {
 export class CodexCliDriver implements AgentDriver {
   readonly kind = 'codex' as const
   readonly capabilities: DriverCapabilities = {
-    supportsNativeResume: false,
+    supportsNativeResume: true,
     supportsSteerWhileRunning: false,
     supportsReadOnlyEnforcement: true,
-    supportsDynamicMcp: false,
+    supportsDynamicMcp: true,
     supportsSubagentBlock: true
   }
 
@@ -403,16 +523,37 @@ export class CodexCliDriver implements AgentDriver {
 
   async runTurn(input: TurnInput): Promise<TurnOutput> {
     const command = input.agent.driverConfig.cliPath?.trim() || 'codex'
-    return await runOneShotStreamCli({
-      daemon: this.daemon,
-      prefix: 'codex',
-      command,
-      args: buildCodexArgs(input),
-      stdinData: combinePrompt(input),
-      closeStdin: true,
-      input,
-      parseLine: parseCodexEventLine
-    })
+    const canResume = Boolean(input.session.nativeSessionId && input.session.configHash === input.configHash)
+    const resumeSessionId = canResume ? input.session.nativeSessionId : null
+
+    try {
+      return await runOneShotStreamCli({
+        daemon: this.daemon,
+        prefix: 'codex',
+        command,
+        args: buildCodexArgs(input, { resumeSessionId }),
+        stdinData: combinePrompt(input, { isResume: Boolean(resumeSessionId) }),
+        closeStdin: true,
+        input,
+        parseLine: parseCodexEventLine
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (resumeSessionId && !input.abortSignal.aborted && MISSING_THREAD_ERR_RE.test(msg)) {
+        input.onSessionUpdate({ nativeSessionId: null })
+        return await runOneShotStreamCli({
+          daemon: this.daemon,
+          prefix: 'codex',
+          command,
+          args: buildCodexArgs(input, { resumeSessionId: null }),
+          stdinData: combinePrompt(input, { isResume: false }),
+          closeStdin: true,
+          input,
+          parseLine: parseCodexEventLine
+        })
+      }
+      throw err
+    }
   }
 
   async disposeSession(session: SessionRecord): Promise<void> {

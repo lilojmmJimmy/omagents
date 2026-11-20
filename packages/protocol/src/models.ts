@@ -175,10 +175,10 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
     requiresExternalCli: true,
     enabledInV1: true,
     capabilities: {
-      supportsNativeResume: false,
+      supportsNativeResume: true,
       supportsSteerWhileRunning: false,
       supportsReadOnlyEnforcement: true,
-      supportsDynamicMcp: false,
+      supportsDynamicMcp: true,
       supportsSubagentBlock: true
     }
   },
