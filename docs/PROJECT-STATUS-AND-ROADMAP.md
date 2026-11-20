@@ -1,8 +1,8 @@
 # MyAgents Project Status & Next-Phase Roadmap
 
-> **Current Baseline**: `v0.2a` (`T-201` & `T-202` delivered; `T-203` HITL deferred)  
-> **Updated**: `2026-11-19`  
-> **Scope**: Single entry point summarizing delivered capabilities, verified quality baseline, resolved engineering fixes, and the remaining backlog from `v0.1` tail through `v0.2b+`.
+> **Current Baseline**: `v0.2b` (`T-101`, `T-103`, `T-301` [Email & GitHub], `T-302` delivered alongside `v0.2a`; all `P3` items deferred)  
+> **Updated**: `2026-11-20`  
+> **Scope**: Single entry point summarizing delivered capabilities, verified quality baseline, and remaining deferred `P3` backlog.
 
 ---
 
@@ -14,6 +14,7 @@ MyAgents is a server-side multi-agent orchestration middleware and React web wor
 2. **5-Layer Agent Isolation, Deadlock-Free `open-channel` Collaboration & Git Worktree Isolation (`v0.1b`)**
 3. **Pregel Super-step `roundtable`, Unified Inbox / Webhooks / `SourcePlugin` Lockdown, and Full `CodexCliDriver` Support (`v0.1c+`)**
 4. **External MCP Servers, Skill Registry, and Background Jobs / Cron Scheduler (`v0.2a`, `T-201` & `T-202`)**
+5. **Attachment Blob Store (Manual Double-Confirmed Cleanup), Email / GitHub Channels, Inbox Replies, and Usage Analytics (`v0.2b`, `T-101`, `T-103`, `T-301`, `T-302`)**
 
 ---
 
@@ -59,22 +60,35 @@ MyAgents is a server-side multi-agent orchestration middleware and React web wor
   - Registered built-in handlers: `sync_source` (pull-based `SourcePlugin` ingestion), `routine_tick` (scheduled single-agent check defaulting to `read-only` unless `allowWrite: true`), and `backup_snapshot` (consistent SQLite `VACUUM INTO` snapshots + configurable retention pruning).
   - Wired RPC endpoints (`jobs.*`, `schedules.*`), real-time WebSocket `jobs.updated` notifications, and [JobsView.tsx](../packages/web/src/components/JobsView.tsx).
 
-### 2.6 Directory Overview
+### 2.6 Stage 5: `v0.2b` Attachments, Email/GitHub Channels, Inbox Replies & Usage Analytics (`T-101`, `T-103`, `T-301`, `T-302`)
+- **T-101 Attachment Blob Storage & Manual User Cleanup (`blob-service.ts`, `attachments.ts`)**:
+  - Content-addressed SHA-256 blob storage under `~/.myagents/blobs/<aa>/<bb>/<sha256>` with transactional `file_refs` (`message`, `inbox`, `room`) and `file_deletion_outbox` queuing when ref counts reach zero.
+  - Wired HTTP multipart upload (`POST /api/blobs/upload`) and XSS-safe download/preview (`GET /api/blobs/:fileId` with `X-Content-Type-Options: nosniff`, `inline` allowed only for safe raster images), [ChatView.tsx](../packages/web/src/components/ChatView.tsx) composer attachments, and automatic `[Attached Files]` context injection into agent turns in [collab-engine.ts](../packages/core/src/collab/collab-engine.ts).
+  - Intentionally omits scheduled automatic blob GC: [SettingsView.tsx](../packages/web/src/components/SettingsView.tsx) provides a manual **Clean Up Unreferenced Blobs** action protected by a two-step double confirmation modal (`blobs.purgeUnreferenced` requiring `{ confirm: true }`).
+- **T-103 & T-301 Email (IMAP/SMTP) & GitHub Plugins + Outbound Replies**:
+  - Added pure-JS [email-plugin.ts](../packages/core/src/inbox/plugins/email-plugin.ts) (`imapflow` + `mailparser` + `nodemailer`) for provider-agnostic IMAP polling (with attachment ingestion into `BlobService` and cursor tracking) and threaded SMTP replies (`In-Reply-To`, `References`).
+  - Enhanced [github-plugin.ts](../packages/core/src/inbox/plugins/github-plugin.ts) (`github-webhook`) with REST API PAT issue/PR polling and outbound issue/PR comment replies while preserving HMAC-SHA256 webhook intake.
+  - Added plugin secret masking (`••••••••`) and update-time secret preservation in [plugin-manager.ts](../packages/core/src/inbox/plugin-manager.ts), routing rule target workspace selection + manual `Sync Now` / `Reply` / `Delete` controls in [InboxView.tsx](../packages/web/src/components/InboxView.tsx), and outbound reply callbacks upon item resolution (`setStatus('resolved')` & `onRootNodeSettled`).
+- **T-302 Global Usage & Cost Analytics (`usage-service.ts`, `analytics.ts`, `AnalyticsView.tsx`)**:
+  - Aggregated `work_nodes.usage_json` across `24h`, `7d`, `30d`, and `all` time windows with KPI totals, time-series usage trend chart, and breakdowns by model, agent, room, and recent runs in [AnalyticsView.tsx](../packages/web/src/components/AnalyticsView.tsx).
+
+### 2.7 Directory Overview
 
 | Path | Responsibility |
 | --- | --- |
-| `packages/protocol/src/` | Zod schemas (`models.ts`, `room.ts`, `collab.ts`, `inbox.ts`, `extensions.ts`, `rpc.ts`) and Node utilities (`node/`) |
+| `packages/protocol/src/` | Zod schemas (`models.ts`, `room.ts`, `collab.ts`, `inbox.ts`, `extensions.ts`, `attachments.ts`, `analytics.ts`, `rpc.ts`) and Node utilities (`node/`) |
 | `packages/plugin-sdk/src/` | Extension SPI (`SourcePlugin`, `InboundEnvelope`, `PluginContext`, `StrategyPlugin`) |
 | `packages/daemon/src/` | Thin detached PTY/pipe session host (`pipe-session.ts`, `pty-session.ts`, `session-host.ts`) |
+| `packages/core/src/analytics/` | `UsageAnalyticsService` aggregating token usage, cost, and latency |
 | `packages/core/src/collab/` | `CollabEngine`, strategies (`single`, `open-channel`, `roundtable`), `context-builder.ts`, `rw-lock.ts` |
-| `packages/core/src/inbox/` | `InboxService`, `PluginManager` (`generic-webhook`, `github-webhook`) |
+| `packages/core/src/inbox/` | `InboxService`, `PluginManager`, `plugins/email-plugin.ts`, `plugins/github-plugin.ts` |
 | `packages/core/src/jobs/` | `cron.ts`, `JobSchedulerService`, `registerBuiltInJobHandlers` (`sync_source`, `routine_tick`, `backup_snapshot`) |
 | `packages/core/src/runtime/` | `BuiltinDriver`, `ClaudeCodeDriver`, `CodexCliDriver`, `AcpCliDriver`, `AgentEnvironmentIsolator`, `SkillRegistryService`, `EnvCheckService` |
 | `packages/core/src/mcp/` | `collab-tools.json`, `mcp-bridge.mjs`, `mcp-config.ts`, `mcp-client.ts`, `McpRegistryService` |
 | `packages/core/src/workspace/` | `WorkspaceService`, `WorktreeService`, `GitService`, `TerminalService`, `path-guard.ts` |
-| `packages/core/src/storage/` | `CoreDatabase` (`node:sqlite` WAL + forward migrations `v1`-`v4`) |
+| `packages/core/src/storage/` | `CoreDatabase` (`node:sqlite` WAL + forward migrations `v1`-`v4`) and `BlobService` |
 | `packages/core/src/security/` | `AuthService` and extension hooks (`hooks.ts`) |
-| `packages/core/src/transport/` | Fastify HTTP server (`/webhooks` raw scope) and WS `/rpc` router |
+| `packages/core/src/transport/` | Fastify HTTP server (`/webhooks` raw scope, `/api/blobs/*`) and WS `/rpc` router |
 | `packages/web/src/` | React 19 workbench (`App.tsx`, `store/app-store.ts`, `components/`) |
 | `scripts/` | `dev.mjs`, `start.mjs`, `smoke.mjs`, `verify-claude-live.mjs`, `verify-claude-v01b-live.mjs` |
 | `docs/` | Architecture specifications (`01`-`05`), design review, and milestone test reports |
@@ -83,12 +97,12 @@ MyAgents is a server-side multi-agent orchestration middleware and React web wor
 
 ## 3. Verified Quality Baseline
 
-Latest verification results after `v0.2a` (`T-201` & `T-202`) implementation:
+Latest verification results after `v0.2b` (`T-101`, `T-103`, `T-301`, `T-302`) delivery:
 
 | Check | Outcome | Notes |
 | --- | --- | --- |
-| **`pnpm run build`** | **Passed (exit `0`)** | Vite v6.4.6 web bundle (`1866 modules`) + `tsc -p .` across all 5 packages (`protocol`, `plugin-sdk`, `daemon`, `web`, `core`) |
-| **`pnpm test`** | **Passed (`15` files / `50` tests, `0` skipped)** | Covers all `v0.1` suites (`e2e`, `acceptance`, `open-channel`, `roundtable`, `latest-turn`, `inbox`, `worktree`, `environment-isolator`, `cli-drivers`, `claude-driver`, `path-guard`, `rw-lock`) plus `mcp-registry`, `skill-registry`, and `job-scheduler` |
+| **`pnpm run build`** | **Passed (exit `0`)** | Vite v6.4.6 web bundle (`1869 modules`) + `tsc -p .` across all 5 packages (`protocol`, `plugin-sdk`, `daemon`, `web`, `core`) |
+| **`pnpm test`** | **Passed (`18` files / `56` tests, `0` skipped)** | Covers all prior `v0.1`/`v0.2a` suites plus `blob-service`, `channels` (`T-103` & `T-301` Email/GitHub), and `usage-service` (`T-302`) |
 | **`node scripts/smoke.mjs`** | **Passed (exit `0`)** | Verified isolated production `core` + `daemon` startup, `HEALTH` (`ok: true`, `daemonConnected: true`), and `WEB_STATUS: 200 HAS_TITLE: true` |
 | **Isolated Live `codex-cli 0.170.0` Verification** | **Passed (exit `0`)** | Verified 2-turn native `exec resume` (`thread_id` recall) and dynamic `-c mcp_servers.myagents.*` discovery against `mcp-bridge.mjs` in an isolated non-git temp workspace |
 
@@ -96,15 +110,16 @@ Latest verification results after `v0.2a` (`T-201` & `T-202`) implementation:
 
 ## 4. Backlog & Next-Phase Roadmap
 
-> Reserved tables and SPI contracts (`files`, `file_refs`, `file_deletion_outbox`, `mcp_servers`, `skills`, `background_jobs`, `approval_requests`, `ApprovalGate`, `reply_target_json`) already exist in the codebase.
+> Reserved tables and SPI contracts (`files`, `file_refs`, `file_deletion_outbox`, `mcp_servers`, `skills`, `background_jobs`, `approval_requests`, `ApprovalGate`, `reply_target_json`) already exist in the codebase.  
+> **Active Priority Policy**: All `P3` items (`T-102`, `T-203`, `T-303`, `T-304`) are currently deferred and excluded from active scheduling.
 
-### 4.1 Group A: Remaining `v0.1` Tail Items (Non-Blocking)
+### 4.1 Group A: Remaining `v0.1` Tail Items
 
-| ID | Priority | Task | Reserved Infra | Scope & Acceptance Criteria |
-| --- | :---: | :--- | :--- | :--- |
-| **T-101** | P1 | **Chat & Inbox Attachment Blob Storage + GC** | `files`, `file_refs`, `file_deletion_outbox` tables ([database.ts](../packages/core/src/storage/database.ts#L259-L289)) | Content-addressed blob store (`~/.myagents/blobs/<aa>/<bb>/<sha256>`), transactional `file_refs` ref-counting, and scheduled outbox GC (best wired alongside **T-202**) |
-| **T-102** | P2 | **Gemini / ACP CLI Live Integration & Resume Eval** | `AcpCliDriver` ([cli-drivers.ts](../packages/core/src/runtime/cli-drivers.ts)) | `CodexCliDriver` stdin/EOF, native resume, dynamic MCP, and isolation flags are verified; run live integration against `gemini` CLI once installed and evaluate native ACP resume/MCP flags |
-| **T-103** | P2 | **Inbox UX Polish (Rule Workspace + Outbound Reply)** | `inbox_items.reply_target_json`, `RoutingRuleAction.workspaceId` | Add optional target workspace selector in [InboxView.tsx](../packages/web/src/components/InboxView.tsx) routing rule form; invoke source plugin reply callback when an inbox item transitions to `resolved` |
+| ID | Priority | Status | Task | Reserved Infra | Scope & Acceptance Criteria |
+| --- | :---: | :---: | :--- | :--- | :--- |
+| **T-101** | P1 | **Delivered** | **Chat & Inbox Attachment Blob Storage + Manual Cleanup** | `files`, `file_refs`, `file_deletion_outbox` tables ([database.ts](../packages/core/src/storage/database.ts#L259-L289)) | Content-addressed SHA-256 store (`~/.myagents/blobs/<aa>/<bb>/<sha256>`), transactional `file_refs`, chat/inbox upload & preview, agent prompt attachment injection, and double-confirmed manual disk cleanup button in Settings (scheduled GC omitted) |
+| **T-102** | P3 | **Deferred / Open** | **Gemini / ACP CLI Live Integration & Resume Eval** | `AcpCliDriver` ([cli-drivers.ts](../packages/core/src/runtime/cli-drivers.ts)) | Deferred (`P3`): `CodexCliDriver` stdin/EOF, native resume, dynamic MCP, and isolation flags are verified; live `gemini` CLI integration and native ACP resume/MCP eval deferred |
+| **T-103** | P2 | **Delivered** | **Inbox UX Polish (Rule Workspace + Outbound Reply)** | `inbox_items.reply_target_json`, `RoutingRuleAction.workspaceId` | Added target project workspace selector in [InboxView.tsx](../packages/web/src/components/InboxView.tsx) routing rule form, manual reply action, and source plugin outbound reply callback on resolution |
 
 ### 4.2 Group B: `v0.2a` Ecosystem & Governance Mainline
 
@@ -112,16 +127,16 @@ Latest verification results after `v0.2a` (`T-201` & `T-202`) implementation:
 | --- | :---: | :---: | :--- | :--- | :--- |
 | **T-201** | P0 | **Delivered** | **External MCP Servers & Skill Registry** | `mcp_servers`, `skills`, `Agent.mcpServerIds / skillIds` | CRUD/RPC and Web UI for external MCP servers (`stdio` / `http`, blocking reserved name `myagents`, secret masking) and local/Git skills (`pinnedCommit`, bounded prompt + `skillsHash`); injects merged configs across `BuiltinDriver`, `ClaudeCodeDriver`, and `CodexCliDriver` (blocked in `lockdown`) |
 | **T-202** | P0 | **Delivered** | **Background Jobs & Cron Scheduler** | `background_jobs`, `scheduled_jobs` (`v4`) | Unified background job runner + 5-field cron scheduler (`run_after`, idempotency keys, exponential backoff retries, startup recovery) with built-in handlers (`sync_source`, `routine_tick`, `backup_snapshot` via `VACUUM INTO`) and Web UI |
-| **T-203** | P1 | **Deferred / Open** | **Human-in-the-Loop Tool Approval (HITL)** | `approval_requests` table; `ApprovalGate` SPI ([hooks.ts](../packages/core/src/security/hooks.ts)) | Deferred out of the initial `v0.2a` batch: pause `WorkNode` into `awaiting_human` on policy-matched high-risk actions, persist `approval_requests`, push WebSocket prompt to Web UI, and resume/deny execution upon user decision |
+| **T-203** | P3 | **Deferred / Open** | **Human-in-the-Loop Tool Approval (HITL)** | `approval_requests` table; `ApprovalGate` SPI ([hooks.ts](../packages/core/src/security/hooks.ts)) | Deferred (`P3`): pause `WorkNode` into `awaiting_human` on policy-matched high-risk actions, persist `approval_requests`, push WebSocket prompt to Web UI, and resume/deny execution upon user decision |
 
 ### 4.3 Group C: `v0.2b+` Channels & Operations
 
-| ID | Priority | Task | Scope & Acceptance Criteria |
-| --- | :---: | :--- | :--- |
-| **T-301** | P2 | **Additional Inbound/Outbound Channel Plugins** | Extend [plugin-sdk](../packages/plugin-sdk/src/index.ts) `SourcePlugin` for Email (IMAP/SMTP), Lark/Feishu, DingTalk, Slack, and Jira |
-| **T-302** | P2 | **Global Usage & Cost Analytics Dashboard** | Aggregate `work_nodes.usage_json` across rooms, agents, models, and time windows |
-| **T-303** | P2 | **Consistent Async Backups (S3 / Off-site Sync)** | Local `VACUUM INTO` SQLite WAL snapshots + retention pruning shipped in **T-202**; add S3-compatible off-site archive upload and checksum verification in `v0.2b+` |
-| **T-304** | P3 | **Managed Browser Tool & Multi-User RBAC** | Controlled browser automation tool and multi-user role-based access control + audit trail |
+| ID | Priority | Status | Task | Scope & Acceptance Criteria |
+| --- | :---: | :---: | :--- | :--- |
+| **T-301** | P2 | **Delivered** | **Email & GitHub Channel Plugins** | Extended [plugin-sdk](../packages/plugin-sdk/src/index.ts) `SourcePlugin` for provider-agnostic IMAP/SMTP Email (with attachment storage & threaded replies) and GitHub PAT polling + issue/PR comment replies; other IM/ticket channels excluded from current scope |
+| **T-302** | P2 | **Delivered** | **Global Usage & Cost Analytics Dashboard** | Aggregated `work_nodes.usage_json` across rooms, agents, models, and `24h`/`7d`/`30d`/`all` time windows in [AnalyticsView.tsx](../packages/web/src/components/AnalyticsView.tsx) |
+| **T-303** | P3 | **Deferred / Open** | **Consistent Async Backups (S3 / Off-site Sync)** | Deferred (`P3`): local `VACUUM INTO` SQLite WAL snapshots + retention pruning shipped in **T-202**; S3-compatible off-site archive upload and checksum verification deferred |
+| **T-304** | P3 | **Deferred / Open** | **Managed Browser Tool & Multi-User RBAC** | Deferred (`P3`): controlled browser automation tool and multi-user role-based access control + audit trail |
 
 ---
 
