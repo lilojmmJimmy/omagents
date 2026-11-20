@@ -110,6 +110,8 @@ export interface EnvironmentIsolator {
     readonlyRefPaths: string[]
     mcpConfigPath?: string
     mcpConfigHash?: string
+    skillsHash?: string
+    externalMcpNames?: string[]
   }): Promise<{ profile: IsolationProfile; configHash: string }>
 }
 

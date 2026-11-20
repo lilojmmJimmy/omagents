@@ -46,6 +46,14 @@ export function myagentsRunDir(): string {
   return path.join(myagentsHome(), 'run')
 }
 
+export function myagentsSkillsDir(): string {
+  return path.join(myagentsHome(), 'skills')
+}
+
+export function myagentsBackupsDir(): string {
+  return path.join(myagentsHome(), 'backups')
+}
+
 export function myagentsMcpConfigPath(memberId: string): string {
   return path.join(myagentsRunDir(), `mcp-${memberId}.json`)
 }

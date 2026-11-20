@@ -3,6 +3,7 @@ import type { ApprovalGate, CollabToolName, DriverCapabilities, Redactor } from 
 import type { DaemonClient } from '../daemon-client'
 import { Errors } from '../errors'
 import collabToolsSpec from '../mcp/collab-tools.json'
+import { McpClient } from '../mcp/mcp-client'
 import type { GitService } from '../workspace/git-service'
 import type { WorkspaceService } from '../workspace/workspace-service'
 import type { AgentDriver, TurnInput, TurnOutput } from './driver'
@@ -195,7 +196,9 @@ export class BuiltinDriver implements AgentDriver {
               }
             }))
         : []
-    const tools = [...baseTools, ...collabTools]
+    const mcpClients: McpClient[] = []
+    const externalToolMap = new Map<string, { client: McpClient; toolName: string }>()
+    const externalTools: OpenAiToolDef[] = []
 
     const sysParts = [
       input.agent.systemPrompt?.trim() || `You are ${input.agent.name}, a helpful and concise AI agent.`,
@@ -206,6 +209,9 @@ export class BuiltinDriver implements AgentDriver {
           ? 'You may inspect files using workspace_* read tools, but you must not modify files.'
           : 'You may read, write, patch files, and run commands inside your workspace using workspace_* tools.'
     ]
+    if (input.skillsPrompt?.trim()) {
+      sysParts.push(input.skillsPrompt.trim())
+    }
     if (input.systemContextPrompt?.trim()) {
       sysParts.push(input.systemContextPrompt.trim())
     }
@@ -256,118 +262,164 @@ export class BuiltinDriver implements AgentDriver {
       }
     }
 
-    for (let step = 1; step <= maxSteps; step++) {
-      if (input.abortSignal.aborted) throw new Error('aborted')
-      stepsRun = step
-
-      const allowTools = step < maxSteps
-      const stepRes = await this.callOpenAiStream({
-        baseUrl: provider.baseUrl,
-        apiKey,
-        model,
-        temperature: input.agent.driverConfig.temperature,
-        messages,
-        tools: allowTools ? tools : undefined,
-        signal: input.abortSignal,
-        onTextDelta: (delta) => {
-          firstOutputAt ??= Date.now()
-          input.emit({ kind: 'text', delta })
-        },
-        onThinkingDelta: (delta) => {
-          firstOutputAt ??= Date.now()
-          input.emit({ kind: 'thinking', delta })
+    try {
+      if (input.isolation.level !== 'lockdown' && input.externalMcpServers?.length) {
+        for (const ext of input.externalMcpServers) {
+          if (input.abortSignal.aborted) throw new Error('aborted')
+          const client = new McpClient(ext)
+          try {
+            await client.connect(12_000)
+            const discovered = await client.listTools(12_000)
+            mcpClients.push(client)
+            for (const t of discovered) {
+              const qualified = `mcp__${ext.name}__${t.name.replace(/[^A-Za-z0-9_-]/g, '_')}`
+              if (externalToolMap.has(qualified)) continue
+              externalToolMap.set(qualified, { client, toolName: t.name })
+              externalTools.push({
+                type: 'function',
+                function: {
+                  name: qualified,
+                  description: t.description || `External MCP tool ${t.name} from ${ext.name}`,
+                  parameters: t.inputSchema
+                }
+              })
+            }
+          } catch (err) {
+            await client.close().catch(() => {})
+            input.emit({
+              kind: 'notice',
+              delta: `Failed to connect MCP server "${ext.name}": ${err instanceof Error ? err.message : String(err)}`
+            })
+          }
         }
-      })
-
-      totalInputTokens += stepRes.inputTokens
-      totalOutputTokens += stepRes.outputTokens
-      totalCacheReadTokens += stepRes.cacheReadTokens
-      totalThinkingTokens += stepRes.thinkingTokens
-      if (stepRes.inputTokens > 0) latestContextUsed = stepRes.inputTokens
-      input.emit({ kind: 'usage', usage: buildUsage() })
-
-      if (stepRes.toolCalls.length === 0) {
-        finalText = stepRes.text
-        break
       }
+      const tools = [...baseTools, ...collabTools, ...externalTools]
 
-      messages.push({
-        role: 'assistant',
-        content: stepRes.text || null,
-        tool_calls: stepRes.toolCalls.map((tc) => ({
-          id: tc.id,
-          type: 'function',
-          function: { name: tc.name, arguments: tc.argumentsText }
-        }))
-      })
-
-      for (const tc of stepRes.toolCalls) {
+      for (let step = 1; step <= maxSteps; step++) {
         if (input.abortSignal.aborted) throw new Error('aborted')
-        let parsedArgs: Record<string, unknown> = {}
-        try {
-          parsedArgs = tc.argumentsText ? (JSON.parse(tc.argumentsText) as Record<string, unknown>) : {}
-        } catch {
-          parsedArgs = { _raw: tc.argumentsText }
+        stepsRun = step
+
+        const allowTools = step < maxSteps
+        const stepRes = await this.callOpenAiStream({
+          baseUrl: provider.baseUrl,
+          apiKey,
+          model,
+          temperature: input.agent.driverConfig.temperature,
+          messages,
+          tools: allowTools ? tools : undefined,
+          signal: input.abortSignal,
+          onTextDelta: (delta) => {
+            firstOutputAt ??= Date.now()
+            input.emit({ kind: 'text', delta })
+          },
+          onThinkingDelta: (delta) => {
+            firstOutputAt ??= Date.now()
+            input.emit({ kind: 'thinking', delta })
+          }
+        })
+
+        totalInputTokens += stepRes.inputTokens
+        totalOutputTokens += stepRes.outputTokens
+        totalCacheReadTokens += stepRes.cacheReadTokens
+        totalThinkingTokens += stepRes.thinkingTokens
+        if (stepRes.inputTokens > 0) latestContextUsed = stepRes.inputTokens
+        input.emit({ kind: 'usage', usage: buildUsage() })
+
+        if (stepRes.toolCalls.length === 0) {
+          finalText = stepRes.text
+          break
         }
 
-        input.emit({
-          kind: 'tool_start',
-          toolCall: { id: tc.id, name: tc.name, input: parsedArgs }
-        })
-
-        const gate = await this.approvalGate.checkToolCall({
-          roomId: input.roomId,
-          workNodeId: input.workNodeId,
-          agentId: input.agent.id,
-          toolName: tc.name,
-          args: parsedArgs
-        })
-
-        let output = ''
-        let isError = false
-        if (gate.decision !== 'allow') {
-          isError = true
-          output = `Tool blocked by policy: ${gate.reason || gate.decision}`
-        } else if (tc.name.startsWith('collab_') && input.callCollabTool && input.allowedCollabTools?.includes(tc.name as CollabToolName)) {
-          try {
-            const res = await input.callCollabTool(tc.name as CollabToolName, parsedArgs, tc.id)
-            output = res.output
-            isError = Boolean(res.isError || !res.ok)
-          } catch (err) {
-            isError = true
-            output = `Error: ${err instanceof Error ? err.message : String(err)}`
-          }
-        } else if (input.isolation.level === 'lockdown') {
-          isError = true
-          output = 'Tool blocked in lockdown isolation mode.'
-        } else {
-          try {
-            output = await this.executeWorkspaceTool(tc.name, parsedArgs, input, readOnly)
-          } catch (err) {
-            isError = true
-            output = `Error: ${err instanceof Error ? err.message : String(err)}`
-          }
-        }
-
-        const safeOut = this.redactor.scrub(output).slice(0, 32_000)
-        input.emit({
-          kind: 'tool_result',
-          toolCall: { id: tc.id, name: tc.name, output: safeOut, isError }
-        })
-        messages.push({ role: 'tool', tool_call_id: tc.id, content: safeOut })
-      }
-
-      if (step === maxSteps - 1) {
         messages.push({
-          role: 'user',
-          content: '[System] You have reached the tool step budget. Summarize your findings and final answer now without calling more tools.'
+          role: 'assistant',
+          content: stepRes.text || null,
+          tool_calls: stepRes.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: { name: tc.name, arguments: tc.argumentsText }
+          }))
         })
-      }
-    }
 
-    return {
-      finalText: finalText || '(Completed without text response)',
-      usage: buildUsage()
+        for (const tc of stepRes.toolCalls) {
+          if (input.abortSignal.aborted) throw new Error('aborted')
+          let parsedArgs: Record<string, unknown> = {}
+          try {
+            parsedArgs = tc.argumentsText ? (JSON.parse(tc.argumentsText) as Record<string, unknown>) : {}
+          } catch {
+            parsedArgs = { _raw: tc.argumentsText }
+          }
+
+          input.emit({
+            kind: 'tool_start',
+            toolCall: { id: tc.id, name: tc.name, input: parsedArgs }
+          })
+
+          const gate = await this.approvalGate.checkToolCall({
+            roomId: input.roomId,
+            workNodeId: input.workNodeId,
+            agentId: input.agent.id,
+            toolName: tc.name,
+            args: parsedArgs
+          })
+
+          let output = ''
+          let isError = false
+          const extTool = externalToolMap.get(tc.name)
+          if (gate.decision !== 'allow') {
+            isError = true
+            output = `Tool blocked by policy: ${gate.reason || gate.decision}`
+          } else if (tc.name.startsWith('collab_') && input.callCollabTool && input.allowedCollabTools?.includes(tc.name as CollabToolName)) {
+            try {
+              const res = await input.callCollabTool(tc.name as CollabToolName, parsedArgs, tc.id)
+              output = res.output
+              isError = Boolean(res.isError || !res.ok)
+            } catch (err) {
+              isError = true
+              output = `Error: ${err instanceof Error ? err.message : String(err)}`
+            }
+          } else if (input.isolation.level === 'lockdown') {
+            isError = true
+            output = 'Tool blocked in lockdown isolation mode.'
+          } else if (extTool) {
+            try {
+              const res = await extTool.client.callTool(extTool.toolName, parsedArgs)
+              output = res.output
+              isError = res.isError
+            } catch (err) {
+              isError = true
+              output = `Error: ${err instanceof Error ? err.message : String(err)}`
+            }
+          } else {
+            try {
+              output = await this.executeWorkspaceTool(tc.name, parsedArgs, input, readOnly)
+            } catch (err) {
+              isError = true
+              output = `Error: ${err instanceof Error ? err.message : String(err)}`
+            }
+          }
+
+          const safeOut = this.redactor.scrub(output).slice(0, 32_000)
+          input.emit({
+            kind: 'tool_result',
+            toolCall: { id: tc.id, name: tc.name, output: safeOut, isError }
+          })
+          messages.push({ role: 'tool', tool_call_id: tc.id, content: safeOut })
+        }
+
+        if (step === maxSteps - 1) {
+          messages.push({
+            role: 'user',
+            content: '[System] You have reached the tool step budget. Summarize your findings and final answer now without calling more tools.'
+          })
+        }
+      }
+
+      return {
+        finalText: finalText || '(Completed without text response)',
+        usage: buildUsage()
+      }
+    } finally {
+      await Promise.all(mcpClients.map((c) => c.close().catch(() => {})))
     }
   }
 

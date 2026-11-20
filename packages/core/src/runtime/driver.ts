@@ -9,6 +9,7 @@ import type {
   Workspace,
   WorkspaceMode
 } from '@myagents/protocol'
+import type { ResolvedExternalMcpServer } from '../mcp/mcp-client'
 
 export interface TurnStreamEvent {
   kind: 'text' | 'thinking' | 'tool_start' | 'tool_result' | 'usage' | 'notice' | 'error'
@@ -48,7 +49,9 @@ export interface TurnInput {
   configHash: string
   instruction: string
   systemContextPrompt?: string
+  skillsPrompt?: string
   mcpConfigPath?: string
+  externalMcpServers?: ResolvedExternalMcpServer[]
   allowedCollabTools?: readonly CollabToolName[]
   callCollabTool?: (
     toolName: CollabToolName,

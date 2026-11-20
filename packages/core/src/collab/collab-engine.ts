@@ -26,9 +26,11 @@ import { myagentsAgentHomePath, type SessionInfo } from '@myagents/protocol/node
 import type { DaemonClient } from '../daemon-client'
 import { Errors } from '../errors'
 import { writeRoomMemberMcpConfig } from '../mcp/mcp-config'
+import type { McpRegistryService } from '../mcp/mcp-registry'
 import type { AgentService } from '../runtime/agent-service'
 import { resolveClaudeSessionFilePath } from '../runtime/claude-driver'
 import type { AgentDriver, SessionRecord, TurnStreamEvent } from '../runtime/driver'
+import type { SkillRegistryService } from '../runtime/skill-registry'
 import type { CoreDatabase } from '../storage/database'
 import type { WorkspaceService } from '../workspace/workspace-service'
 import { buildTurnContext } from './context-builder'
@@ -274,14 +276,20 @@ export class CollabEngine {
   private reconciling = true
   private eventSeqCounter = 0
 
+  private readonly mcpRegistry?: McpRegistryService
+  private readonly skillRegistry?: SkillRegistryService
+
   constructor(
     private readonly database: CoreDatabase,
     private readonly agents: AgentService,
     private readonly workspaces: WorkspaceService,
     private readonly isolator: EnvironmentIsolator,
     private readonly daemon: DaemonClient,
-    private readonly events: CollabEvents
+    private readonly events: CollabEvents,
+    extensions?: { mcpRegistry?: McpRegistryService; skillRegistry?: SkillRegistryService }
   ) {
+    this.mcpRegistry = extensions?.mcpRegistry
+    this.skillRegistry = extensions?.skillRegistry
     this.registerStrategy(singleStrategy)
     this.registerStrategy(openChannelStrategy)
     this.registerStrategy(roundtableStrategy)
@@ -1568,13 +1576,18 @@ export class CollabEngine {
       const mcpAllowedTools = isLockdown
         ? allowedCollabTools.filter((t) => t === 'collab_history' || t === 'collab_publish')
         : allowedCollabTools
+      const skillsData = this.skillRegistry?.loadPromptSection(agent.skillIds) ?? { promptBlock: '', skillsHash: '' }
+      const externalMcpServers =
+        !isLockdown && this.mcpRegistry ? await this.mcpRegistry.resolveForAgent(agent.mcpServerIds) : []
+
       let mcpConfigPath: string | undefined
       let mcpConfigHash: string | undefined
-      if (mcpAllowedTools.length > 0 && agent.driverKind !== 'builtin') {
+      if ((mcpAllowedTools.length > 0 || externalMcpServers.length > 0) && agent.driverKind !== 'builtin') {
         const mcpInfo = writeRoomMemberMcpConfig({
           roomId: row.room_id,
           memberId: row.assignee_member_id,
-          allowedTools: mcpAllowedTools
+          allowedTools: mcpAllowedTools,
+          externalServers: externalMcpServers
         })
         mcpConfigPath = mcpInfo.configPath
         mcpConfigHash = mcpInfo.configHash
@@ -1590,7 +1603,9 @@ export class CollabEngine {
         readableFiles: [],
         readonlyRefPaths: workspace.readonlyRefs,
         mcpConfigPath,
-        mcpConfigHash
+        mcpConfigHash,
+        skillsHash: skillsData.skillsHash || undefined,
+        externalMcpNames: externalMcpServers.map((s) => s.name)
       })
 
       if (!this.checkLeaseValid(row.id, leaseToken, ['starting'])) {
@@ -1707,7 +1722,9 @@ export class CollabEngine {
           configHash,
           instruction: turnContext.instructionPrompt,
           systemContextPrompt: turnContext.systemContextPrompt,
+          skillsPrompt: skillsData.promptBlock || undefined,
           mcpConfigPath,
+          externalMcpServers,
           allowedCollabTools,
           callCollabTool: (toolName, args, toolCallId) =>
             this.handleCollabToolCall({

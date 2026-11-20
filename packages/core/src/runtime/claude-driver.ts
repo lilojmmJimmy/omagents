@@ -110,7 +110,11 @@ function buildClaudeArgs(input: TurnInput, sessionId: string, isResume: boolean)
     args.push('--session-id', sessionId)
   }
 
-  const systemParts = [input.agent.systemPrompt?.trim(), input.systemContextPrompt?.trim()].filter(Boolean)
+  const systemParts = [
+    input.agent.systemPrompt?.trim(),
+    input.skillsPrompt?.trim(),
+    input.systemContextPrompt?.trim()
+  ].filter(Boolean)
   if (systemParts.length > 0) {
     args.push('--append-system-prompt', systemParts.join('\n\n'))
   }

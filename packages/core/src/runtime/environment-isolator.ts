@@ -112,6 +112,11 @@ export class AgentEnvironmentIsolator implements EnvironmentIsolator {
         'mcp__myagents__collab_history',
         'mcp__myagents__collab_remember'
       )
+      if (level === 'standard' && ctx.externalMcpNames?.length) {
+        for (const name of ctx.externalMcpNames) {
+          allowedTools.push(`mcp__${name}__*`)
+        }
+      }
     }
 
     // Layer 4: Readonly references & exact readable attachments (never via --add-dir)
@@ -148,6 +153,7 @@ export class AgentEnvironmentIsolator implements EnvironmentIsolator {
           isolationMode: ctx.agent.isolationMode,
           workspaceRootPath: ctx.workspace.rootPath,
           mcpConfigHash: ctx.mcpConfigHash ?? null,
+          skillsHash: ctx.skillsHash ?? null,
           profile
         })
       )

@@ -11,7 +11,8 @@ const CodexMcpServerEntrySchema = z.object({
   command: z.string().min(1).optional(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
-  url: z.string().min(1).optional()
+  url: z.string().min(1).optional(),
+  headers: z.record(z.string()).optional()
 })
 export type CodexMcpServerEntry = z.infer<typeof CodexMcpServerEntrySchema>
 
@@ -21,6 +22,7 @@ const McpConfigFileSchema = z.object({
 
 const SAFE_TOML_KEY_RE = /^[A-Za-z0-9_-]+$/
 const SAFE_ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/
+const SAFE_HEADER_KEY_RE = /^[A-Za-z0-9-]+$/
 const MAX_FALLBACK_HISTORY_CHARS = 24_000
 const MISSING_THREAD_ERR_RE =
   /session.*not found|thread.*not found|no rollout found|failed to resume|could not find.*thread/i
@@ -76,7 +78,11 @@ export function combinePrompt(input: TurnInput, opts?: { isResume?: boolean }): 
   if (opts?.isResume) {
     return `${guard}${input.instruction}`
   }
-  const parts = [input.agent.systemPrompt?.trim(), input.systemContextPrompt?.trim()].filter(Boolean)
+  const parts = [
+    input.agent.systemPrompt?.trim(),
+    input.skillsPrompt?.trim(),
+    input.systemContextPrompt?.trim()
+  ].filter(Boolean)
   const prefix = parts.length > 0 ? `[System Context]\n${parts.join('\n\n')}\n\n` : ''
   const history = formatHistoryBlock(input)
   return `${prefix}${history}${guard}${input.instruction}`
@@ -99,6 +105,12 @@ export function serializeCodexMcpConfigArgs(mcpServers: Record<string, CodexMcpS
       }
     } else if (entry.url) {
       args.push('-c', `mcp_servers.${name}.url=${JSON.stringify(entry.url)}`)
+      if (entry.headers) {
+        for (const [headerKey, headerVal] of Object.entries(entry.headers)) {
+          if (!SAFE_HEADER_KEY_RE.test(headerKey)) continue
+          args.push('-c', `mcp_servers.${name}.http_headers.${headerKey}=${JSON.stringify(headerVal)}`)
+        }
+      }
     }
   }
   return args
