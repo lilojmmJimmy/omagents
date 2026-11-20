@@ -11,12 +11,14 @@ import {
   RoutingRuleSaveInput,
   ScheduledJobSaveInput,
   SkillInstallInput,
+  UsageAnalyticsQuerySchema,
   WorkNodeControlAction,
   type JsonRpcError,
   type JsonRpcRequest,
   type JsonRpcSuccess
 } from '@myagents/protocol'
 import { z } from 'zod'
+import type { UsageAnalyticsService } from '../analytics/usage-service'
 import type { CollabEngine } from '../collab/collab-engine'
 import type { DaemonClient } from '../daemon-client'
 import { AppError, Errors } from '../errors'
@@ -29,6 +31,7 @@ import type { EnvCheckService } from '../runtime/env-check'
 import type { ProviderService } from '../runtime/provider-service'
 import type { SkillRegistryService } from '../runtime/skill-registry'
 import type { AuthService } from '../security/auth-service'
+import type { BlobService } from '../storage/blob-service'
 import type { GitService } from '../workspace/git-service'
 import type { TerminalService } from '../workspace/terminal-service'
 import type { WorkspaceService } from '../workspace/workspace-service'
@@ -48,6 +51,8 @@ export interface RpcDeps {
   mcpRegistry?: McpRegistryService
   skillRegistry?: SkillRegistryService
   jobs?: JobSchedulerService
+  blobs?: BlobService
+  analytics?: UsageAnalyticsService
   isNonLoopback: boolean
 }
 
@@ -117,6 +122,9 @@ export class RpcRouter {
             'external-mcp',
             'skills-registry',
             'cron-scheduler',
+            'attachments-blob',
+            'email-github-channels',
+            'usage-analytics',
             'workspace-files',
             'git-diff',
             'web-terminal'
@@ -333,12 +341,26 @@ export class RpcRouter {
       case 'rooms.sendMessage': {
         const parsed = z.object({
           roomId: z.string().min(1),
-          content: z.string().min(1),
+          content: z.string().default(''),
+          attachmentFileIds: z.array(z.string().min(1)).max(10).optional(),
           replyToMsgId: z.string().optional(),
           idempotencyKey: z.string().min(1)
         }).parse(p)
+        const fileIds = parsed.attachmentFileIds ?? []
+        if (!parsed.content.trim() && fileIds.length === 0) {
+          throw Errors.invalidParams('Message content or attachment is required')
+        }
+        const attachments =
+          fileIds.length > 0
+            ? this.deps.blobs
+              ? this.deps.blobs.resolveRefs(fileIds)
+              : (() => {
+                  throw Errors.notFound('Blob storage service not configured')
+                })()
+            : []
         const message = await this.deps.collab.sendMessage(parsed.roomId, {
           content: parsed.content,
+          attachments,
           authorName: actorUsername,
           replyToMsgId: parsed.replyToMsgId,
           idempotencyKey: parsed.idempotencyKey
@@ -405,7 +427,8 @@ export class RpcRouter {
           content: z.string().trim().min(1),
           authorName: z.string().optional(),
           source: z.string().optional(),
-          externalUrl: z.string().optional()
+          externalUrl: z.string().optional(),
+          attachmentFileIds: z.array(z.string().min(1)).max(10).optional()
         }).parse(p)
         return await this.deps.inbox.createManual(parsed)
       }
@@ -426,9 +449,27 @@ export class RpcRouter {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
         const parsed = z.object({
           itemId: z.string().min(1),
-          status: InboxStatus
+          status: InboxStatus,
+          sendReply: z.boolean().optional(),
+          replyText: z.string().optional()
         }).parse(p)
-        return this.deps.inbox.setStatus(parsed.itemId, parsed.status)
+        return await this.deps.inbox.setStatus(parsed.itemId, parsed.status, {
+          sendReply: parsed.sendReply,
+          replyText: parsed.replyText
+        })
+      }
+      case 'inbox.delete': {
+        if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
+        this.deps.inbox.deleteItem(z.string().min(1).parse(p.itemId))
+        return { ok: true }
+      }
+      case 'inbox.reply': {
+        if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
+        const parsed = z.object({
+          itemId: z.string().min(1),
+          text: z.string().optional()
+        }).parse(p)
+        return await this.deps.inbox.replyToItem(parsed.itemId, parsed.text)
       }
       case 'plugins.list': {
         if (!this.deps.plugins) throw Errors.notFound('Plugin manager not configured')
@@ -448,9 +489,31 @@ export class RpcRouter {
         }).parse(p)
         return this.deps.plugins.configureInstance(parsed)
       }
+      case 'plugins.delete': {
+        if (!this.deps.plugins) throw Errors.notFound('Plugin manager not configured')
+        this.deps.plugins.deleteInstance(z.string().min(1).parse(p.id))
+        return { ok: true }
+      }
       case 'plugins.syncNow': {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
         return await this.deps.inbox.syncPluginInstance(z.string().min(1).parse(p.instanceId))
+      }
+
+      // Attachment Blob Storage & Manual Cleanup (T-101)
+      case 'blobs.summary': {
+        if (!this.deps.blobs) throw Errors.notFound('Blob storage service not configured')
+        return this.deps.blobs.getStorageSummary()
+      }
+      case 'blobs.purgeUnreferenced': {
+        if (!this.deps.blobs) throw Errors.notFound('Blob storage service not configured')
+        z.object({ confirm: z.literal(true) }).parse(p)
+        return this.deps.blobs.purgeUnreferenced()
+      }
+
+      // Global Usage & Cost Analytics (T-302)
+      case 'analytics.usage': {
+        if (!this.deps.analytics) throw Errors.notFound('Usage analytics service not configured')
+        return this.deps.analytics.getReport(UsageAnalyticsQuerySchema.parse(p))
       }
 
       // External MCP Servers & Skills Registry (v0.2a T-201)

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { coreEndpointPath, myagentsDbPath, writePrivateFileSync } from '@myagents/protocol/node'
+import { UsageAnalyticsService } from './analytics/usage-service'
 import { CollabEngine } from './collab/collab-engine'
 import { DaemonClient } from './daemon-client'
 import { InboxService } from './inbox/inbox-service'
@@ -17,6 +18,7 @@ import { ProviderService } from './runtime/provider-service'
 import { SkillRegistryService } from './runtime/skill-registry'
 import { AuthService } from './security/auth-service'
 import { BasicRedactor, DefaultSecretProvider, NoopApprovalGate } from './security/hooks'
+import { BlobService } from './storage/blob-service'
 import { CoreDatabase } from './storage/database'
 import { createCoreHttpServer, type CoreHttpServer } from './transport/http-server'
 import { RpcRouter } from './transport/rpc-router'
@@ -58,6 +60,8 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
   const agents = new AgentService(database, workspaces)
   const mcpRegistry = new McpRegistryService(database, secrets, redactor)
   const skillRegistry = new SkillRegistryService(database)
+  const blobs = new BlobService(database)
+  const analytics = new UsageAnalyticsService(database)
 
   let httpServer: CoreHttpServer | null = null
   let inbox: InboxService | null = null
@@ -77,7 +81,7 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
       workNodeUpdated: (node) => httpServer?.broadcast('workNode.updated', node),
       rootNodeSettled: (node) => inbox?.onRootNodeSettled(node)
     },
-    { mcpRegistry, skillRegistry }
+    { mcpRegistry, skillRegistry, blobs }
   )
 
   collab.registerDriver(new BuiltinDriver(providers, workspaces, git, daemon, approvalGate, redactor))
@@ -85,10 +89,17 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
   collab.registerDriver(new CodexCliDriver(daemon))
   collab.registerDriver(new AcpCliDriver(daemon))
 
-  const plugins = new PluginManager(database, secrets)
-  inbox = new InboxService(database, collab, agents, plugins, (item) => {
-    httpServer?.broadcast('inbox.updated', item)
-  })
+  const plugins = new PluginManager(database, secrets, blobs, redactor)
+  inbox = new InboxService(
+    database,
+    collab,
+    agents,
+    plugins,
+    (item) => {
+      httpServer?.broadcast('inbox.updated', item)
+    },
+    blobs
+  )
   const jobs = new JobSchedulerService(database, {
     onUpdate: (ev) => httpServer?.broadcast('jobs.updated', ev)
   })
@@ -123,6 +134,8 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
     mcpRegistry,
     skillRegistry,
     jobs,
+    blobs,
+    analytics,
     isNonLoopback
   })
 
@@ -133,6 +146,7 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
     rpcRouter,
     workspaces,
     terminals,
+    blobs,
     isNonLoopback,
     internalToken,
     onInternalMcpCall: (req) => collab.handleCollabToolCall(req),
@@ -176,6 +190,8 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
     mcpRegistry,
     skillRegistry,
     jobs,
+    blobs,
+    analytics,
     async stop() {
       await jobs.stop()
       collab.abortInProcessRuns()

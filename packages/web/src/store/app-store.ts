@@ -25,7 +25,7 @@ import type {
 import { create } from 'zustand'
 import { apiAuthMe, apiLogout, rpc } from '../api/rpc-client'
 
-export type NavPage = 'chat' | 'inbox' | 'agents' | 'extensions' | 'jobs' | 'workspaces' | 'settings'
+export type NavPage = 'chat' | 'inbox' | 'agents' | 'extensions' | 'jobs' | 'analytics' | 'workspaces' | 'settings'
 export type DockTab = 'files' | 'changes' | 'tasks' | 'terminal'
 
 export interface LiveToolStep {
@@ -102,7 +102,7 @@ interface AppState {
   refreshJobs(): Promise<void>
   selectRoom(roomId: string | null): Promise<void>
   loadNodeEvents(nodeId: string): Promise<void>
-  sendMessage(roomId: string, content: string, replyToMsgId?: string): Promise<void>
+  sendMessage(roomId: string, content: string, replyToMsgId?: string, attachmentFileIds?: string[]): Promise<void>
   controlNode(
     nodeId: string,
     action: WorkNodeControlAction,
@@ -282,9 +282,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  sendMessage: async (roomId, content, replyToMsgId) => {
+  sendMessage: async (roomId, content, replyToMsgId, attachmentFileIds) => {
     const idempotencyKey = `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    await rpc.call('rooms.sendMessage', { roomId, content, replyToMsgId, idempotencyKey })
+    await rpc.call('rooms.sendMessage', {
+      roomId,
+      content,
+      replyToMsgId,
+      attachmentFileIds: attachmentFileIds && attachmentFileIds.length > 0 ? attachmentFileIds : undefined,
+      idempotencyKey
+    })
   },
 
   controlNode: async (nodeId, action, opts) => {

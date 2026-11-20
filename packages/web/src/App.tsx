@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import {
+  BarChart3,
   Bot,
   Clock,
   Folder,
@@ -18,6 +19,7 @@ import {
 import type { WorkspaceMode } from '@myagents/protocol'
 import { rpc } from './api/rpc-client'
 import { AgentsView } from './components/AgentsView'
+import { AnalyticsView } from './components/AnalyticsView'
 import { ChatView } from './components/ChatView'
 import { ExtensionsView } from './components/ExtensionsView'
 import { InboxView } from './components/InboxView'
@@ -495,6 +497,7 @@ export function App() {
               ['agents', '智能体', Bot],
               ['extensions', 'Extensions', Puzzle],
               ['jobs', 'Jobs & Cron', Clock],
+              ['analytics', 'Usage & Cost', BarChart3],
               ['workspaces', '工作区', Folder],
               ['settings', '设置', Settings]
             ] as const).map(([key, label, Icon]) => (
@@ -611,6 +614,7 @@ export function App() {
           {navPage === 'agents' && <AgentsView />}
           {navPage === 'extensions' && <ExtensionsView />}
           {navPage === 'jobs' && <JobsView />}
+          {navPage === 'analytics' && <AnalyticsView />}
           {navPage === 'workspaces' && <WorkspacesView />}
           {navPage === 'settings' && <SettingsView />}
         </main>
