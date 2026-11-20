@@ -1,12 +1,18 @@
 import { useState, type FormEvent } from 'react'
-import { Bot, MessageSquare, Plus, Shield, Trash2 } from 'lucide-react'
+import { Bot, MessageSquare, Plus, Shield, SlidersHorizontal, Trash2 } from 'lucide-react'
 import type { Agent, DriverKind, IsolationMode, PermissionMode } from '@myagents/protocol'
 import { rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
+function toggleId(list: string[], id: string): string[] {
+  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
+}
+
 export function AgentsView() {
   const agents = useAppStore((s) => s.agents)
   const providers = useAppStore((s) => s.providers)
+  const mcpServers = useAppStore((s) => s.mcpServers)
+  const skills = useAppStore((s) => s.skills)
   const refreshAll = useAppStore((s) => s.refreshAll)
   const selectRoom = useAppStore((s) => s.selectRoom)
 
@@ -19,6 +25,11 @@ export function AgentsView() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('workspace-write')
   const [isolationMode, setIsolationMode] = useState<IsolationMode>('standard')
   const [systemPrompt, setSystemPrompt] = useState('')
+  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>([])
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [editingCapsAgentId, setEditingCapsAgentId] = useState<string | null>(null)
+  const [editMcpIds, setEditMcpIds] = useState<string[]>([])
+  const [editSkillIds, setEditSkillIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const handleCreate = async (e: FormEvent) => {
@@ -33,18 +44,44 @@ export function AgentsView() {
         driverConfig: model.trim() ? { model: model.trim() } : {},
         permissionMode,
         isolationMode,
-        systemPrompt
+        systemPrompt,
+        mcpServerIds: selectedMcpIds,
+        skillIds: selectedSkillIds
       })
       setName('')
       setBio('')
       setModel('')
       setIsolationMode('standard')
       setSystemPrompt('')
+      setSelectedMcpIds([])
+      setSelectedSkillIds([])
       setCreating(false)
       await refreshAll()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建失败')
+      setError(err instanceof Error ? err.message : 'Failed to create agent')
     }
+  }
+
+  const openCapabilities = (agent: Agent) => {
+    if (editingCapsAgentId === agent.id) {
+      setEditingCapsAgentId(null)
+      return
+    }
+    setEditingCapsAgentId(agent.id)
+    setEditMcpIds(agent.mcpServerIds)
+    setEditSkillIds(agent.skillIds)
+  }
+
+  const saveCapabilities = async (agentId: string) => {
+    await rpc.call('agents.update', {
+      id: agentId,
+      patch: {
+        mcpServerIds: editMcpIds,
+        skillIds: editSkillIds
+      }
+    })
+    setEditingCapsAgentId(null)
+    await refreshAll()
   }
 
   const startQuickChat = async (agent: Agent) => {
@@ -218,6 +255,49 @@ export function AgentsView() {
               />
             </div>
 
+            {(mcpServers.length > 0 || skills.length > 0) && (
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs text-[#555] mb-1">External MCP Servers</label>
+                  <div className="border border-[#dcdcdc] rounded-lg p-2 max-h-28 overflow-y-auto space-y-1 text-xs">
+                    {mcpServers.length === 0 ? (
+                      <span className="text-[#999]">None configured</span>
+                    ) : (
+                      mcpServers.map((s) => (
+                        <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedMcpIds.includes(s.id)}
+                            onChange={() => setSelectedMcpIds((prev) => toggleId(prev, s.id))}
+                          />
+                          <span className="font-mono truncate">{s.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-[#555] mb-1">Equipped Skills</label>
+                  <div className="border border-[#dcdcdc] rounded-lg p-2 max-h-28 overflow-y-auto space-y-1 text-xs">
+                    {skills.length === 0 ? (
+                      <span className="text-[#999]">None installed</span>
+                    ) : (
+                      skills.map((sk) => (
+                        <label key={sk.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedSkillIds.includes(sk.id)}
+                            onChange={() => setSelectedSkillIds((prev) => toggleId(prev, sk.id))}
+                          />
+                          <span className="truncate">{sk.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {error && <div className="text-xs text-red-600">{error}</div>}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setCreating(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
@@ -237,45 +317,127 @@ export function AgentsView() {
             </div>
           ) : (
             agents.map((a) => (
-              <div key={a.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Bot size={15} className="text-[#c2542d]" />
-                    <span className="text-sm font-medium text-[#111]">{a.name}</span>
-                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">{a.driverKind}</span>
-                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555]">{a.permissionMode}</span>
-                    {a.isolationMode !== 'standard' && (
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded font-mono ${
-                          a.isolationMode === 'lockdown' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-blue-50 text-blue-700'
-                        }`}
-                      >
-                        <Shield size={10} />
-                        {a.isolationMode}
-                      </span>
-                    )}
+              <div key={a.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Bot size={15} className="text-[#c2542d]" />
+                      <span className="text-sm font-medium text-[#111]">{a.name}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">{a.driverKind}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555]">{a.permissionMode}</span>
+                      {a.isolationMode !== 'standard' && (
+                        <span
+                          className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded font-mono ${
+                            a.isolationMode === 'lockdown' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-blue-50 text-blue-700'
+                          }`}
+                        >
+                          <Shield size={10} />
+                          {a.isolationMode}
+                        </span>
+                      )}
+                      {a.mcpServerIds.length > 0 && (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono">
+                          {a.mcpServerIds.length} MCP
+                        </span>
+                      )}
+                      {a.skillIds.length > 0 && (
+                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono">
+                          {a.skillIds.length} skill(s)
+                        </span>
+                      )}
+                    </div>
+                    {a.bio && <p className="text-xs text-[#666]">{a.bio}</p>}
+                    <p className="text-[11px] text-[#999] font-mono truncate">私有工作区：{a.defaultWorkspacePath}</p>
                   </div>
-                  {a.bio && <p className="text-xs text-[#666]">{a.bio}</p>}
-                  <p className="text-[11px] text-[#999] font-mono truncate">私有工作区：{a.defaultWorkspacePath}</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openCapabilities(a)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs border border-[#dcdcdc] text-[#444] hover:bg-[#fafafa] rounded-lg cursor-pointer"
+                      title="Configure MCP servers & skills"
+                    >
+                      <SlidersHorizontal size={12} />
+                      <span>Capabilities</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void startQuickChat(a)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-[#c2542d]/10 text-[#c2542d] hover:bg-[#c2542d]/15 rounded-lg cursor-pointer"
+                    >
+                      <MessageSquare size={12} />
+                      <span>开聊</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void archiveAgent(a)}
+                      className="p-1.5 text-[#888] hover:text-red-600 rounded-lg cursor-pointer"
+                      title="归档"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => void startQuickChat(a)}
-                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-[#c2542d]/10 text-[#c2542d] hover:bg-[#c2542d]/15 rounded-lg cursor-pointer"
-                  >
-                    <MessageSquare size={12} />
-                    <span>开聊</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void archiveAgent(a)}
-                    className="p-1.5 text-[#888] hover:text-red-600 rounded-lg cursor-pointer"
-                    title="归档"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+
+                {editingCapsAgentId === a.id && (
+                  <div className="border-t border-[#efefef] pt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <div className="text-[#555] font-medium mb-1">External MCP Servers</div>
+                        {mcpServers.length === 0 ? (
+                          <div className="text-[#999]">No MCP servers registered in Extensions.</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {mcpServers.map((s) => (
+                              <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editMcpIds.includes(s.id)}
+                                  onChange={() => setEditMcpIds((prev) => toggleId(prev, s.id))}
+                                />
+                                <span className="font-mono">{s.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[#555] font-medium mb-1">Equipped Skills</div>
+                        {skills.length === 0 ? (
+                          <div className="text-[#999]">No skills installed in Extensions.</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {skills.map((sk) => (
+                              <label key={sk.id} className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={editSkillIds.includes(sk.id)}
+                                  onChange={() => setEditSkillIds((prev) => toggleId(prev, sk.id))}
+                                />
+                                <span>{sk.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingCapsAgentId(null)}
+                        className="px-2.5 py-1 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void saveCapabilities(a.id)}
+                        className="px-2.5 py-1 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer"
+                      >
+                        Save Capabilities
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}

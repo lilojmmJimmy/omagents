@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   Bot,
+  Clock,
   Folder,
   Inbox,
   LogOut,
   MessageSquare,
   PanelRight,
   Plus,
+  Puzzle,
   Settings,
   Trash2,
   Wifi,
@@ -17,7 +19,9 @@ import type { WorkspaceMode } from '@myagents/protocol'
 import { rpc } from './api/rpc-client'
 import { AgentsView } from './components/AgentsView'
 import { ChatView } from './components/ChatView'
+import { ExtensionsView } from './components/ExtensionsView'
 import { InboxView } from './components/InboxView'
+import { JobsView } from './components/JobsView'
 import { LoginView } from './components/LoginView'
 import { SettingsView } from './components/SettingsView'
 import { WorkspaceDock } from './components/WorkspaceDock'
@@ -489,6 +493,8 @@ export function App() {
               ['chat', '会话', MessageSquare],
               ['inbox', '收件箱', Inbox],
               ['agents', '智能体', Bot],
+              ['extensions', 'Extensions', Puzzle],
+              ['jobs', 'Jobs & Cron', Clock],
               ['workspaces', '工作区', Folder],
               ['settings', '设置', Settings]
             ] as const).map(([key, label, Icon]) => (
@@ -603,6 +609,8 @@ export function App() {
           {navPage === 'chat' && <ChatView onOpenNewChat={() => setNewChatOpen(true)} />}
           {navPage === 'inbox' && <InboxView />}
           {navPage === 'agents' && <AgentsView />}
+          {navPage === 'extensions' && <ExtensionsView />}
+          {navPage === 'jobs' && <JobsView />}
           {navPage === 'workspaces' && <WorkspacesView />}
           {navPage === 'settings' && <SettingsView />}
         </main>

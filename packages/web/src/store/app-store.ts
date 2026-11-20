@@ -1,6 +1,8 @@
 import type {
   Agent,
+  BackgroundJob,
   InboxItem,
+  McpServer,
   MessagesRevealedNotification,
   ModelProvider,
   NodeEvent,
@@ -11,6 +13,8 @@ import type {
   RoomMessage,
   RoomSummary,
   RoutingRule,
+  ScheduledJob,
+  Skill,
   StreamDeltaNotification,
   TurnUsage,
   WebhookConfig,
@@ -21,7 +25,7 @@ import type {
 import { create } from 'zustand'
 import { apiAuthMe, apiLogout, rpc } from '../api/rpc-client'
 
-export type NavPage = 'chat' | 'inbox' | 'agents' | 'workspaces' | 'settings'
+export type NavPage = 'chat' | 'inbox' | 'agents' | 'extensions' | 'jobs' | 'workspaces' | 'settings'
 export type DockTab = 'files' | 'changes' | 'tasks' | 'terminal'
 
 export interface LiveToolStep {
@@ -72,6 +76,10 @@ interface AppState {
   routingRules: RoutingRule[]
   pluginDescriptors: PluginDescriptor[]
   pluginInstances: PluginInstance[]
+  mcpServers: McpServer[]
+  skills: Skill[]
+  jobs: BackgroundJob[]
+  schedules: ScheduledJob[]
 
   selectedRoomId: string | null
   currentRoom: RoomDetail | null
@@ -90,6 +98,8 @@ interface AppState {
 
   refreshAll(): Promise<void>
   refreshInbox(): Promise<void>
+  refreshExtensions(): Promise<void>
+  refreshJobs(): Promise<void>
   selectRoom(roomId: string | null): Promise<void>
   loadNodeEvents(nodeId: string): Promise<void>
   sendMessage(roomId: string, content: string, replyToMsgId?: string): Promise<void>
@@ -134,6 +144,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   routingRules: [],
   pluginDescriptors: [],
   pluginInstances: [],
+  mcpServers: [],
+  skills: [],
+  jobs: [],
+  schedules: [],
 
   selectedRoomId: null,
   currentRoom: null,
@@ -196,6 +210,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     ])
     set({ providers, agents, workspaces, rooms, envCheck })
     void get().refreshInbox().catch(() => {})
+    void get().refreshExtensions().catch(() => {})
+    void get().refreshJobs().catch(() => {})
     const curId = get().selectedRoomId
     if (curId && rooms.some((r) => r.id === curId)) {
       await get().selectRoom(curId)
@@ -218,6 +234,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       pluginDescriptors: plugins.descriptors,
       pluginInstances: plugins.instances
     })
+  },
+
+  refreshExtensions: async () => {
+    const [mcpServers, skills] = await Promise.all([
+      rpc.call<McpServer[]>('mcpServers.list'),
+      rpc.call<Skill[]>('skills.list')
+    ])
+    set({ mcpServers, skills })
+  },
+
+  refreshJobs: async () => {
+    const [jobs, schedules] = await Promise.all([
+      rpc.call<BackgroundJob[]>('jobs.list', { limit: 100 }),
+      rpc.call<ScheduledJob[]>('schedules.list')
+    ])
+    set({ jobs, schedules })
   },
 
   selectRoom: async (roomId) => {
@@ -345,6 +377,8 @@ async function connectAndBind(set: any, get: () => AppState) {
         })
       } else if (method === 'inbox.updated') {
         void get().refreshInbox().catch(() => {})
+      } else if (method === 'jobs.updated') {
+        void get().refreshJobs().catch(() => {})
       } else if (method === 'workNode.updated') {
         const node = params as WorkNode
         set((s: AppState) => {
