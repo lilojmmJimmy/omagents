@@ -2,7 +2,7 @@
 import { StringDecoder } from 'node:string_decoder'
 import { z } from 'zod'
 
-export const DAEMON_PROTOCOL_VERSION = 1
+export const DAEMON_PROTOCOL_VERSION = 2
 
 export const CLEAN_ENV_KEYS: readonly string[] = [
   'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TMPDIR', 'TEMP', 'TMP', 'TZ',
@@ -41,6 +41,11 @@ const LaunchParams = z.object({
   env: z.record(z.string()).default({})
 })
 
+const PipeLaunchParams = LaunchParams.extend({
+  stdinData: z.string().optional(),
+  closeStdin: z.boolean().optional()
+})
+
 export const AttachResultSchema = SessionInfo.extend({
   buffer: z.string(),
   bufferStart: z.number().int().nonnegative(),
@@ -59,15 +64,19 @@ export const daemonMethods = {
     result: SessionRef
   },
   spawnPipe: {
-    params: LaunchParams,
+    params: PipeLaunchParams,
     result: SessionRef
   },
   spawnPipeClean: {
-    params: LaunchParams,
+    params: PipeLaunchParams,
     result: SessionRef
   },
   write: {
     params: SessionRef.extend({ data: z.string() }),
+    result: Ok
+  },
+  endInput: {
+    params: SessionRef,
     result: Ok
   },
   resize: {

@@ -1,32 +1,41 @@
 import { randomUUID } from 'node:crypto'
 import type { DriverCapabilities, TurnUsage } from '@myagents/protocol'
-import type { DaemonEvent } from '@myagents/protocol/node'
+import { DAEMON_PROTOCOL_VERSION, type DaemonEvent } from '@myagents/protocol/node'
 import type { DaemonClient } from '../daemon-client'
 import { Errors } from '../errors'
 import type { AgentDriver, SessionRecord, TurnInput, TurnOutput } from './driver'
 
-function combinePrompt(input: TurnInput): string {
+function isReadOnlyTurn(input: TurnInput): boolean {
+  return (
+    input.isolation.level !== 'standard' ||
+    input.workspaceMode === 'read-only' ||
+    input.agent.permissionMode === 'read-only'
+  )
+}
+
+export function combinePrompt(input: TurnInput): string {
   const parts = [input.agent.systemPrompt?.trim(), input.systemContextPrompt?.trim()].filter(Boolean)
   const prefix = parts.length > 0 ? `[System Context]\n${parts.join('\n\n')}\n\n` : ''
-  const readOnly = input.isolation.level !== 'standard' || input.workspaceMode === 'read-only'
-  const guard = readOnly
+  const guard = isReadOnlyTurn(input)
     ? '[Constraint: READ-ONLY workspace access. Do NOT edit files or run mutating commands.]\n\n'
     : ''
   return `${prefix}${guard}${input.instruction}`
 }
 
 export function buildCodexArgs(input: TurnInput): string[] {
-  const readOnly = input.isolation.level !== 'standard' || input.workspaceMode === 'read-only'
-  const args: string[] = ['exec', '--json']
+  const readOnly = isReadOnlyTurn(input)
+  const args: string[] = ['exec', '--json', '--skip-git-repo-check']
   if (input.agent.driverConfig.model?.trim()) {
     args.push('--model', input.agent.driverConfig.model.trim())
   }
   if (readOnly) {
     args.push('--sandbox', 'read-only')
   } else if (input.agent.permissionMode === 'full') {
-    args.push('--full-auto')
+    args.push('--dangerously-bypass-approvals-and-sandbox')
+  } else {
+    args.push('--sandbox', 'workspace-write')
   }
-  args.push(combinePrompt(input))
+  args.push('-')
   return args
 }
 
@@ -47,6 +56,16 @@ export function parseCodexEventLine(rawLine: string): {
   const type = String(frame.type || '')
   if (type === 'error' && typeof frame.message === 'string') {
     return { errorText: frame.message }
+  }
+  if (type === 'turn.failed') {
+    const errObj = (frame.error ?? {}) as { message?: unknown }
+    const msg =
+      typeof errObj.message === 'string'
+        ? errObj.message
+        : typeof frame.message === 'string'
+          ? frame.message
+          : 'Codex turn failed'
+    return { errorText: msg }
   }
   if (type === 'item.completed' || type === 'item.started') {
     const item = (frame.item ?? {}) as Record<string, unknown>
@@ -71,14 +90,53 @@ export function parseCodexEventLine(rawLine: string): {
         }
       }
     }
+    if (itemType === 'file_change') {
+      if (type === 'item.started') {
+        return { toolStart: { id: itemId, name: 'codex_file_change', input: { changes: item.changes } } }
+      }
+      return {
+        toolResult: {
+          id: itemId,
+          name: 'codex_file_change',
+          output: JSON.stringify(item.changes ?? []),
+          isError: item.status === 'failed'
+        }
+      }
+    }
+    if (itemType === 'mcp_tool_call') {
+      const toolName = String(item.tool || 'mcp_tool')
+      if (type === 'item.started') {
+        return { toolStart: { id: itemId, name: toolName, input: item.arguments } }
+      }
+      return {
+        toolResult: {
+          id: itemId,
+          name: toolName,
+          output: typeof item.result === 'string' ? item.result : JSON.stringify(item.result ?? item.error ?? ''),
+          isError: item.status === 'failed' || Boolean(item.error)
+        }
+      }
+    }
   }
   if (type === 'turn.completed' && frame.usage && typeof frame.usage === 'object') {
-    const u = frame.usage as { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number }
+    const u = frame.usage as {
+      input_tokens?: number
+      cached_input_tokens?: number
+      cache_write_input_tokens?: number
+      output_tokens?: number
+      reasoning_output_tokens?: number
+    }
     return {
       usage: {
         inputTokens: u.input_tokens,
         cacheReadTokens: u.cached_input_tokens,
+        ...(typeof u.cache_write_input_tokens === 'number'
+          ? { cacheCreationTokens: u.cache_write_input_tokens }
+          : {}),
         outputTokens: u.output_tokens,
+        ...(typeof u.reasoning_output_tokens === 'number'
+          ? { thinkingTokens: u.reasoning_output_tokens }
+          : {}),
         contextUsedTokens: (u.input_tokens ?? 0) + (u.cached_input_tokens ?? 0)
       }
     }
@@ -87,7 +145,7 @@ export function parseCodexEventLine(rawLine: string): {
 }
 
 export function buildAcpArgs(input: TurnInput): string[] {
-  const readOnly = input.isolation.level !== 'standard' || input.workspaceMode === 'read-only'
+  const readOnly = isReadOnlyTurn(input)
   const args: string[] = ['-p', combinePrompt(input), '--output-format', 'stream-json']
   if (input.agent.driverConfig.model?.trim()) {
     args.push('--model', input.agent.driverConfig.model.trim())
@@ -167,24 +225,24 @@ async function runOneShotStreamCli(opts: {
   prefix: string
   command: string
   args: string[]
+  stdinData?: string
+  closeStdin?: boolean
   input: TurnInput
   parseLine: (line: string) => ReturnType<typeof parseAcpEventLine>
 }): Promise<TurnOutput> {
+  if (opts.input.abortSignal.aborted) {
+    throw new Error('aborted')
+  }
+  const daemonProto = opts.daemon.daemonProtocolVersion ?? DAEMON_PROTOCOL_VERSION
+  if ((opts.closeStdin || opts.stdinData !== undefined) && daemonProto < 2) {
+    throw Errors.driverError(
+      `MyAgents daemon (protocol v${daemonProto}) does not support closing stdin for ${opts.command} CLI. Please restart the MyAgents daemon.`
+    )
+  }
+
   const startedAt = Date.now()
   const sessionId = `${opts.prefix}-${randomUUID()}`
   const spawnMethod = opts.input.isolation.cleanEnv ? 'spawnPipeClean' : 'spawnPipe'
-  await opts.daemon.call(spawnMethod, {
-    sessionId,
-    command: opts.command,
-    args: opts.args,
-    cwd: opts.input.workspace.rootPath,
-    env: { ...(opts.input.isolation.envOverrides ?? {}) }
-  })
-  opts.input.onSessionUpdate({
-    daemonSessionId: sessionId,
-    configHash: opts.input.configHash,
-    lastConsumedOffset: 0
-  })
 
   return await new Promise<TurnOutput>((resolve, reject) => {
     let settled = false
@@ -245,56 +303,89 @@ async function runOneShotStreamCli(opts: {
     }
     resetIdle()
 
+    const processLine = (line: string) => {
+      if (!line || settled) return
+      const parsed = opts.parseLine(line)
+      if (!parsed) return
+      if (parsed.thinkingDelta) {
+        opts.input.emit({ kind: 'thinking', delta: parsed.thinkingDelta })
+      }
+      if (parsed.toolStart) {
+        opts.input.emit({ kind: 'tool_start', toolCall: parsed.toolStart })
+      }
+      if (parsed.toolResult) {
+        opts.input.emit({ kind: 'tool_result', toolCall: parsed.toolResult })
+      }
+      if (parsed.textDelta) {
+        textBuf += parsed.textDelta
+        opts.input.emit({ kind: 'text', delta: parsed.textDelta })
+      }
+      if (parsed.usage) {
+        latestUsage = parsed.usage
+        opts.input.emit({ kind: 'usage', usage: parsed.usage })
+      }
+      if (parsed.errorText) {
+        fail(Errors.driverError(parsed.errorText))
+      }
+    }
+
     const unsub = opts.daemon.onEvent((ev: DaemonEvent) => {
       if (ev.sessionId !== sessionId) return
       if (ev.event === 'stderr') {
         stderrBuf += ev.data
+        if (stderrBuf.length > 8192) stderrBuf = stderrBuf.slice(-8192)
         return
       }
       if (ev.event === 'data') {
-        firstFrame = true
+        if (!firstFrame) {
+          firstFrame = true
+          clearTimeout(firstTimer)
+        }
         resetIdle()
         lineBuf += ev.data
         let nl = lineBuf.indexOf('\n')
-        while (nl !== -1) {
+        while (nl !== -1 && !settled) {
           const line = lineBuf.slice(0, nl).trim()
           lineBuf = lineBuf.slice(nl + 1)
-          if (line) {
-            const parsed = opts.parseLine(line)
-            if (parsed?.thinkingDelta) {
-              opts.input.emit({ kind: 'thinking', delta: parsed.thinkingDelta })
-            }
-            if (parsed?.toolStart) {
-              opts.input.emit({ kind: 'tool_start', toolCall: parsed.toolStart })
-            }
-            if (parsed?.toolResult) {
-              opts.input.emit({ kind: 'tool_result', toolCall: parsed.toolResult })
-            }
-            if (parsed?.textDelta) {
-              textBuf += parsed.textDelta
-              opts.input.emit({ kind: 'text', delta: parsed.textDelta })
-            }
-            if (parsed?.usage) {
-              latestUsage = parsed.usage
-              opts.input.emit({ kind: 'usage', usage: parsed.usage })
-            }
-            if (parsed?.errorText) {
-              fail(Errors.driverError(parsed.errorText))
-              return
-            }
-          }
+          processLine(line)
           nl = lineBuf.indexOf('\n')
         }
         return
       }
       if (ev.event === 'exit') {
         opts.input.onSessionUpdate({ daemonSessionId: null })
+        const tail = lineBuf.trim()
+        lineBuf = ''
+        if (tail) processLine(tail)
         if (!settled) {
           if (ev.exitCode === 0) succeed()
           else fail(Errors.driverError(`${opts.command} exited with code ${ev.exitCode}${stderrBuf ? `: ${stderrBuf.trim().slice(0, 400)}` : ''}`))
         }
       }
     })
+
+    void opts.daemon
+      .call(spawnMethod, {
+        sessionId,
+        command: opts.command,
+        args: opts.args,
+        cwd: opts.input.workspace.rootPath,
+        env: { ...(opts.input.isolation.envOverrides ?? {}) },
+        ...(opts.stdinData !== undefined ? { stdinData: opts.stdinData } : {}),
+        ...(opts.closeStdin ? { closeStdin: true } : {})
+      })
+      .then(() => {
+        if (!settled) {
+          opts.input.onSessionUpdate({
+            daemonSessionId: sessionId,
+            configHash: opts.input.configHash,
+            lastConsumedOffset: 0
+          })
+        }
+      })
+      .catch((err) => {
+        fail(err instanceof Error ? err : Errors.driverError(String(err)))
+      })
   })
 }
 
@@ -317,6 +408,8 @@ export class CodexCliDriver implements AgentDriver {
       prefix: 'codex',
       command,
       args: buildCodexArgs(input),
+      stdinData: combinePrompt(input),
+      closeStdin: true,
       input,
       parseLine: parseCodexEventLine
     })
@@ -348,6 +441,7 @@ export class AcpCliDriver implements AgentDriver {
       prefix: 'acp',
       command,
       args: buildAcpArgs(input),
+      closeStdin: true,
       input,
       parseLine: parseAcpEventLine
     })

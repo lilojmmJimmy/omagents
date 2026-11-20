@@ -412,9 +412,41 @@ export class CollabEngine {
     const activeCountRow = this.database.db
       .prepare("SELECT COUNT(*) AS c FROM work_nodes WHERE room_id = ? AND status IN ('queued','waiting_deps','waiting_lock','starting','running','waiting_children')")
       .get(row.id) as { c: number }
-    const failedRow = this.database.db
-      .prepare("SELECT id FROM work_nodes WHERE room_id = ? AND status = 'failed' ORDER BY updated_at DESC LIMIT 1")
-      .get(row.id)
+    const latestNodeRow = this.database.db
+      .prepare(
+        'SELECT id, root_node_id, request_msg_id, superstep FROM work_nodes WHERE room_id = ? ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+      )
+      .get(row.id) as
+      | { id: string; root_node_id: string; request_msg_id: string | null; superstep: number | null }
+      | undefined
+    let hasFailedNode = false
+    if (latestNodeRow) {
+      const failedRow = this.database.db
+        .prepare(
+          `SELECT wn.id
+           FROM work_nodes wn
+           WHERE wn.room_id = ?
+             AND wn.status = 'failed'
+             AND NOT EXISTS (
+               SELECT 1 FROM work_nodes rep WHERE rep.room_id = wn.room_id AND rep.supersedes_node_id = wn.id
+             )
+             AND (
+               wn.root_node_id = ?
+               OR (? IS NOT NULL AND wn.request_msg_id = ?)
+               OR (? IS NOT NULL AND wn.superstep = ?)
+             )
+           LIMIT 1`
+        )
+        .get(
+          row.id,
+          latestNodeRow.root_node_id,
+          latestNodeRow.request_msg_id,
+          latestNodeRow.request_msg_id,
+          latestNodeRow.superstep,
+          latestNodeRow.superstep
+        )
+      hasFailedNode = Boolean(failedRow)
+    }
     return {
       id: row.id,
       title: row.title,
@@ -434,7 +466,7 @@ export class CollabEngine {
       updatedAt: row.updated_at,
       members,
       activeNodeCount: activeCountRow?.c ?? 0,
-      hasFailedNode: Boolean(failedRow)
+      hasFailedNode
     }
   }
 

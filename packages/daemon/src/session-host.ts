@@ -20,6 +20,7 @@ const PIPE_STDERR_CHARS = 64 * 1024
 export type HostedProcess = {
   pid?: number
   write(data: string): void
+  endInput?(): void
   resize(cols: number, rows: number): void
   kill(force: boolean): void
 }
@@ -110,6 +111,10 @@ export function createSessionHost(emit: (event: DaemonEvent) => void): {
     spawnPipeClean: (params) => track('pipe', params.sessionId, (events) => startPipe(params, events, true)),
     write: ({ sessionId, data }) => {
       getSession(sessionId).process.write(data)
+      return { ok: true }
+    },
+    endInput: ({ sessionId }) => {
+      getSession(sessionId).process.endInput?.()
       return { ok: true }
     },
     resize: ({ sessionId, cols, rows }) => {

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   createNdjsonParser,
+  DAEMON_PROTOCOL_VERSION,
   daemonEndpointPath,
   DaemonEventSchema,
   type DaemonEvent,
@@ -23,6 +24,7 @@ type PendingCall = {
 export class DaemonClient {
   private socket: net.Socket | null = null
   private connected = false
+  private protocolVersion = DAEMON_PROTOCOL_VERSION
   private readonly pending = new Map<string, PendingCall>()
   private readonly listeners = new Set<(event: DaemonEvent) => void>()
   private readonly endpoint: string
@@ -35,17 +37,64 @@ export class DaemonClient {
     return this.connected
   }
 
+  get daemonProtocolVersion(): number {
+    return this.protocolVersion
+  }
+
   onEvent(listener: (event: DaemonEvent) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  private async checkProtocolAndMaybeUpgrade(autoStart: boolean): Promise<boolean> {
+    const info = await this.call('info', {}, 5000)
+    this.protocolVersion = info.protocolVersion
+    if (info.protocolVersion >= DAEMON_PROTOCOL_VERSION || !autoStart) {
+      return true
+    }
+
+    const list = await this.call('list', {}, 5000)
+    const activeCount = list.sessions.filter((s) => !s.exited).length
+    if (activeCount > 0) {
+      console.warn(
+        `[daemon-client] Connected to older daemon (protocol v${info.protocolVersion} < v${DAEMON_PROTOCOL_VERSION}), keeping alive due to ${activeCount} active session(s)`
+      )
+      return true
+    }
+
+    if (info.pid > 0 && info.pid !== process.pid) {
+      console.log(
+        `[daemon-client] Upgrading idle daemon (pid=${info.pid}) from protocol v${info.protocolVersion} to v${DAEMON_PROTOCOL_VERSION}...`
+      )
+      this.close()
+      try {
+        if (process.platform === 'win32') process.kill(info.pid)
+        else process.kill(info.pid, 'SIGTERM')
+      } catch {
+        // already exited
+      }
+      const waitDeadline = Date.now() + 2000
+      while (Date.now() < waitDeadline) {
+        await new Promise((r) => setTimeout(r, 100))
+        try {
+          process.kill(info.pid, 0)
+        } catch {
+          break
+        }
+      }
+      return false
+    }
+
+    return true
   }
 
   async connect(autoStart = true): Promise<void> {
     if (this.connected) return
     try {
       await this.tryConnect()
-      return
+      if (await this.checkProtocolAndMaybeUpgrade(autoStart)) return
     } catch (err) {
+      this.close()
       if (!autoStart) throw err
     }
 
@@ -55,6 +104,8 @@ export class DaemonClient {
       await new Promise((r) => setTimeout(r, 250))
       try {
         await this.tryConnect()
+        const info = await this.call('info', {}, 5000).catch(() => null)
+        if (info) this.protocolVersion = info.protocolVersion
         return
       } catch {
         // retry until daemon socket comes up

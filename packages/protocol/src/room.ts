@@ -230,3 +230,20 @@ export const TerminalSessionSchema = z.object({
   updatedAt: z.number()
 })
 export type TerminalSession = z.infer<typeof TerminalSessionSchema>
+
+export function pickLatestRetryableNode(nodes: readonly WorkNode[]): WorkNode | undefined {
+  if (nodes.length === 0) return undefined
+  const supersededIds = new Set(
+    nodes.map((n) => n.supersedesNodeId).filter((id): id is string => Boolean(id))
+  )
+  const sorted = [...nodes].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.createdAt - a.createdAt))
+  const anchor = sorted[0]!
+  const latestBatch = sorted.filter(
+    (n) =>
+      !supersededIds.has(n.id) &&
+      (n.rootNodeId === anchor.rootNodeId ||
+        (anchor.requestMsgId !== null && n.requestMsgId === anchor.requestMsgId) ||
+        (anchor.superstep !== null && n.superstep === anchor.superstep))
+  )
+  return latestBatch.find((n) => n.status === 'failed' || n.status === 'paused')
+}

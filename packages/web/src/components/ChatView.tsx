@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { NodeEvent, RoomMember, RoomMessage, TurnUsage, WorkNode } from '@myagents/protocol'
+import { pickLatestRetryableNode, type NodeEvent, type RoomMember, type RoomMessage, type TurnUsage, type WorkNode } from '@myagents/protocol'
 import { useAppStore, type LiveToolStep, type LiveTurnBuffer } from '../store/app-store'
 
 function formatTokens(n?: number | null): string {
@@ -311,7 +311,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
   const nodes = roomId ? (workNodesByRoom[roomId] ?? []) : []
   const liveTurns = roomId ? Object.values(liveTurnsByRoom[roomId] ?? {}) : []
   const activeNode = nodes.find((n) => ['queued', 'waiting_lock', 'starting', 'running'].includes(n.status))
-  const retryableNode = !activeNode ? nodes.find((n) => n.status === 'failed' || n.status === 'paused') : undefined
+  const retryableNode = !activeNode ? pickLatestRetryableNode(nodes) : undefined
   const ws = workspaces.find((w) => w.id === currentRoom?.primaryWorkspaceId)
   const isMultiAgent = Boolean(currentRoom && currentRoom.strategyId !== 'single')
   const primaryMember = currentRoom?.members[0]

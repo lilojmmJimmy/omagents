@@ -489,7 +489,7 @@ export class BuiltinDriver implements AgentDriver {
       signal.addEventListener('abort', onAbort, { once: true })
 
       this.daemon
-        .call('spawnPipeClean', { sessionId, command, args, cwd, env: {} })
+        .call('spawnPipeClean', { sessionId, command, args, cwd, env: {}, closeStdin: true })
         .catch((err) => {
           if (settled) return
           settled = true
