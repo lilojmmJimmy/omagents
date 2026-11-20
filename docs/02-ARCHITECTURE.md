@@ -1,225 +1,225 @@
-# 02. 系统架构设计文档（System Architecture）
+# 02. System Architecture Design
 
-> **文档状态**：v2.0 定稿（已合入评审重构、无竞态调度架构、5 层 Agent 环境隔离设计、Reducer + Super-step 双节拍引擎与 Antumi 后端复用策略）  
-> **部署边界声明**：`v0.x` 为**单 Core 实例**纯服务端架构（内存级 Per-Room Actor、写优先读写锁、本地工作区与本地 Daemon Socket）；未来多节点执行通过将 `Core ↔ Daemon` 的 NDJSON 升级为 TLS/WS 横向扩展执行节点实现。
+> **Status**: v2.0 Final (incorporates review refactors, race-free scheduler, 5-layer agent isolation, Reducer + Super-step dual-beat engine, and Antumi backend adaptation boundaries)  
+> **Deployment Boundary**: `v0.x` targets a **single Core instance** server-first architecture (in-memory Per-Room Actor, writer-preferring RW lock, local workspaces, local Daemon socket). Future multi-node scaling upgrades Core-to-Daemon NDJSON over TLS/WS.
 
 ---
 
-## 1. 总体分层架构
+## 1. Layered System Architecture
 
 ```mermaid
 flowchart TB
-  subgraph Client["纯自研 Web 客户端 (packages/web · React + Vite + Tailwind)"]
-    UI["登录页 / 单聊 / 协作群(v0.1b) / 讨论室&收件箱(v0.1c)"]
-    DOCK["右侧工作台: 文件树与编辑器 / Git Diff / 任务树 / xterm.js"]
+  subgraph Client["React Web Client (packages/web · React + Vite + Tailwind)"]
+    UI["Sign In / Direct Chat / Open Channel (v0.1b) / Roundtable & Inbox (v0.1c)"]
+    DOCK["Right Workspace Dock: File Tree & Editor / Git Diff / Task Tree / xterm.js"]
   end
 
-  subgraph Core["控制面服务端 (packages/core · Node.js 22+ · node:sqlite)"]
-    subgraph Transport["接入层 Transport"]
-      HTTP["HTTP Server (Fastify): 登录 / REST / 文件上传 / Webhooks / Web静态页"]
-      WSRPC["WS /rpc: JSON-RPC 2.0 控制与流式事件 (带 Origin 与鉴权校验)"]
-      WSTERM["WS /terminal/:id: 独立二进制 PTY 通道 (避免阻塞控制流)"]
+  subgraph Core["Control Plane Server (packages/core · Node.js 22+ · node:sqlite)"]
+    subgraph Transport["Transport Layer"]
+      HTTP["HTTP Server (Fastify): Auth / REST / Uploads / Webhooks / Static Web Bundle"]
+      WSRPC["WS /rpc: JSON-RPC 2.0 control & streaming events (Origin + auth checks)"]
+      WSTERM["WS /terminal/:id: Dedicated binary PTY socket"]
     end
 
-    subgraph Security["安全与治理中间件"]
-      HOOKS["AuthGuard(v0.1a极简密码) · SecretProvider · Redactor · ApprovalGate"]
+    subgraph Security["Security & Governance Middleware"]
+      HOOKS["AuthGuard (scrypt password) · SecretProvider · Redactor · ApprovalGate"]
     end
 
-    subgraph Collab["统一多 Agent 协作内核 (CollabEngine)"]
-      ACTOR["Per-Room Actor 串行链 + 同步 SQLite 事务"]
+    subgraph Collab["Unified Collaboration Kernel (CollabEngine)"]
+      ACTOR["Per-Room Actor serial queue + synchronous SQLite transactions"]
       STRAT["CollabStrategy Registry (event-driven / superstep + Reducer)"]
-      SCHED["无竞态 Scheduler (CAS leaseToken · 写优先RWLock · 并发配额 · 慢IO外置)"]
+      SCHED["Race-free Scheduler (CAS leaseToken · writer-preferring RWLock · concurrency slots)"]
     end
 
-    subgraph Runtime["双轨 Agent 运行时与环境隔离"]
-      ISO["EnvironmentIsolator (5层隔离架构: Env清洗 / Home目录 / Lockdown / 围栏 / ConfigHash)"]
-      BUILTIN["BuiltinDriver (进程内 ReAct + Tool Calling · OpenAI-Compat)"]
-      CLAUDE["ClaudeCodeDriver (复用 Antumi ChatHost + claude-stream)"]
-      MCP["内置 MCP 抗重启桥 (v0.1b 复用 Antumi mcp-main.ts 独立 stdio 子进程)"]
+    subgraph Runtime["Dual-Track Agent Runtime & Sandbox Isolation"]
+      ISO["EnvironmentIsolator (5-layer isolation: Env / HomeDir / Lockdown / Fence / ConfigHash)"]
+      BUILTIN["BuiltinDriver (In-process ReAct + Tool Calling · OpenAI-compatible)"]
+      CLAUDE["ClaudeCodeDriver (Adapted Antumi ChatHost + claude-stream)"]
+      MCP["Restart-Resilient MCP Bridge (v0.1b mcp-main.ts stdio child process)"]
     end
 
-    subgraph Workspace["工作区与能力层"]
-      WSVC["WorkspaceService (私有目录 / 项目 / Worktree / 乐观锁文件API / Diff / 终端)"]
-      INTAKE["Intake & RoutingEngine (v0.1c 统一收件箱 + plugin-sdk)"]
+    subgraph Workspace["Workspaces & Capabilities"]
+      WSVC["WorkspaceService (Private / Project / Worktree / optimistic file API / Diff / Terminal)"]
+      INTAKE["Intake & RoutingEngine (v0.1c Unified Inbox + plugin-sdk)"]
       CAP["Capabilities: ModelProviders · Skills · External MCP"]
     end
 
-    subgraph Storage["统一存储层"]
-      DB[("SQLite WAL (node:sqlite · 唯一状态真相源)")]
-      BLOB[("BlobStore (本地/S3 附件库)")]
-      BAK["BackupAdapter (异步快照备份 SPI)"]
+    subgraph Storage["Unified Storage Layer"]
+      DB[("SQLite WAL (node:sqlite · Single Source of Truth)")]
+      BLOB[("BlobStore (content-addressed attachments)")]
+      BAK["BackupAdapter (async snapshot SPI)"]
     end
   end
 
-  subgraph Daemon["执行面进程宿主 (packages/daemon · 复用 Antumi 极薄纯 Node)"]
-    PIPE["PipeSession (外部 CLI 无 shell stdio 管道 + cleanEnv)"]
-    PTY["PtySession (node-pty 交互终端)"]
-    BUF["Ring OutputBuffer (8MB pipe / 512KB pty · offset 增量回放)"]
+  subgraph Daemon["Execution Process Host (packages/daemon · Thin Node.js + node-pty)"]
+    PIPE["PipeSession (shell-free external CLI stdio pipe + cleanEnv)"]
+    PTY["PtySession (node-pty interactive terminal)"]
+    BUF["Ring OutputBuffer (8MB pipe / 512KB pty · offset incremental replay)"]
   end
 
   UI <-->|HTTP / WS JSON-RPC| Transport
-  DOCK <-->|独立 PTY WS| WSTERM
+  DOCK <-->|Dedicated PTY WS| WSTERM
   Transport --> Security --> Collab & WSVC & INTAKE
   Collab <--> STRAT
   Collab --> SCHED --> Runtime
   ISO --> BUILTIN & CLAUDE
   CLAUDE -->|NDJSON over Unix Socket / Named Pipe| Daemon
-  WSVC -->|PTY 代理| PTY
+  WSVC -->|PTY Proxy| PTY
   Collab & WSVC & INTAKE --> Storage
 ```
 
 ---
 
-## 2. Monorepo 目录结构与复用策略
+## 2. Monorepo Structure & Reuse Boundaries
 
-### 2.1 目录边界与依赖方向
+### 2.1 Package Boundaries & Dependency Graph
 ```text
 my-agents/
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── docs/                          # 01~05 正式架构基线文档
+├── docs/                          # Architecture & milestone specs
 └── packages/
-    ├── protocol/                  # 【零业务/IO依赖，仅依赖 zod】
+    ├── protocol/                  # Zero IO/business logic, Zod-only browser-safe + node subpath
     │   └── src/
-    │       ├── models/            # Agent / Workspace / Room / WorkNode / File / Auth 等 Schema
-    │       ├── state-machines/    # 纯函数状态校验（前后端共享）
-    │       ├── rpc/               # WS JSON-RPC 方法与事件 Schema
-    │       ├── collab/            # CollabStrategy / Reducer / EngineAction / MCP 工具常量
-    │       ├── isolation/         # IsolationProfile 与权限映射契约
-    │       ├── hooks/             # 4 个安全 Hook 接口
-    │       └── node/              # 子入口 @myagents/protocol/node：daemon NDJSON 协议、路径、Windows planLaunch
-    ├── daemon/                    # 【极薄进程宿主，零业务逻辑，仅含 node-pty 原生依赖】
-    ├── plugin-sdk/                # 【外部来源插件 SDK（v0.1c 激活）】
-    ├── core/                      # 【纯 Node.js 控制面，使用原生 node:sqlite，零 C++ 编译依赖】
-    └── web/                       # 【纯自研 React + Vite + Tailwind + Zustand + CodeMirror + xterm.js】
+    │       ├── models/            # Agent / Workspace / Room / WorkNode / File / Auth schemas
+    │       ├── state-machines/    # Pure state transition validators shared by core & web
+    │       ├── rpc/               # WS JSON-RPC method & event schemas
+    │       ├── collab/            # CollabStrategy / Reducer / EngineAction / MCP constants
+    │       ├── isolation/         # IsolationProfile & permission mapping contracts
+    │       ├── hooks/             # 4 security hook interfaces
+    │       └── node/              # @myagents/protocol/node: daemon NDJSON, paths, planLaunch
+    ├── daemon/                    # Thin process host, zero business logic, node-pty only
+    ├── plugin-sdk/                # SourcePlugin SDK contracts
+    ├── core/                      # Node.js control plane using native node:sqlite
+    └── web/                       # React + Vite + Tailwind + Zustand + xterm.js SPA
 ```
 
-**强制依赖方向**（禁止逆向与循环依赖）：
-- `web` ──► `protocol`
-- `daemon` ──► `protocol/node`
-- `plugin-sdk` ──► `protocol`
-- `core` ──► `protocol`、`protocol/node`、`plugin-sdk`
+**Strict Dependency Direction** (no cycles or reverse edges):
+- `web` -> `protocol`
+- `daemon` -> `protocol/node`
+- `plugin-sdk` -> `protocol`
+- `core` -> `protocol`, `protocol/node`, `plugin-sdk`
 
-### 2.2 Antumi（Apache 2.0）后端资产复用与自研边界
-复用 Antumi 源码时遵守 Apache 2.0 许可（保留版权声明并标明修改）：
-- **直接复用/适配的纯 Node 后端底座**：
-  - `packages/daemon/src/`（`session-host`、`pipe-session`、`pty-session`、`output-buffer`、`endpoint-claim`；剔除 `awake-service`）
-  - `packages/protocol/src/node/`（`command-launch.ts` Windows `.cmd` 无 shell 启动、`daemon-protocol.ts`、`paths.ts`、`private-file.ts`）
-  - `packages/core/src/chat-host.ts` + `line-framer.ts` + `agents/claude/`（`claude-stream`、`claude-command`、`claude-provider`）
-  - `packages/core/src/workspace.ts`、`worktree-service.ts`、`git-service.ts`、`terminal-service.ts`、`mcp-main.ts`（v0.1b）
-  - `packages/core/src/agent-account-home.ts`、`reference-paths.ts`（用于 5 层环境隔离）
-- **完全自研的核心差异化部分**：
-  - **纯自研 `packages/web`**（不搬迁 Antumi 桌面端 renderer）
-  - **内置轻量 `BuiltinDriver`**（进程内流式 ReAct + Tool Calling + `workspace_*` 工具）
-  - **统一 `CollabEngine` + 可插拔 `CollabStrategy`（Reducer + `event-driven / superstep` 双节拍）**
-  - **无竞态调度器**（写优先读写锁 + CAS `lease_token` + `work_deliveries`）与极简登录安全基线
+### 2.2 Antumi (Apache-2.0) Adaptation vs. Original Implementation
+Source adapted from Antumi follows Apache-2.0 attribution requirements (see `THIRD-PARTY-NOTICES.md`):
+- **Adapted Node.js Infrastructure**:
+  - `packages/daemon/src/` (`session-host`, `pipe-session`, `pty-session`, `output-buffer`, `endpoint-claim`)
+  - `packages/protocol/src/node/` (`command-launch.ts` shell-free Windows `.cmd`/`.ps1` launcher, `daemon-protocol.ts`, `paths.ts`, `private-file.ts`)
+  - `packages/core/src/chat-host.ts` + `line-framer.ts` + `agents/claude/` (`claude-stream`, `claude-command`, `claude-provider`)
+  - `packages/core/src/workspace.ts`, `worktree-service.ts`, `git-service.ts`, `terminal-service.ts`, `mcp-main.ts` (`v0.1b`)
+  - `packages/core/src/agent-account-home.ts`, `reference-paths.ts` (5-layer isolation support)
+- **Original Core & Web Platform**:
+  - **Custom `packages/web` React SPA**
+  - **In-process `BuiltinDriver`** (streaming ReAct + tool calling + `workspace_*` tools)
+  - **Unified `CollabEngine` + Pluggable `CollabStrategy`** (Reducer + `event-driven` / `superstep` dual execution model)
+  - **Race-free Scheduler** (writer-preferring RWLock + CAS `lease_token` + `work_deliveries`) and auth baseline
 
 ---
 
-## 3. Agent 环境隔离架构设计（5 层纵深隔离）
+## 3. Agent Environment Isolation (5-Layer Defense-in-Depth)
 
-> **分期落地约定**：本节为完整架构与接口设计，**第一版（`v0.1a`）完成 `IsolationProfile` 契约、`daemon.spawnPipeClean` 能力及基础环境变量/工具禁用口子；第二版（`v0.1b`）全面激活目录隔离、Lockdown 模式与 `config_hash` 漂移检测**。
+> **Phased Delivery**: `v0.1a` implements `IsolationProfile` contracts, `daemon.spawnPipeClean`, and baseline env/tool scoping; `v0.1b` activates full config-dir isolation, strict `lockdown` enforcement, and `config_hash` drift restarts.
 
-借鉴 Antumi 的实战隔离方案，将 Agent 执行隔离划分为 5 层正交机制，由 `core/src/runtime/environment-isolator.ts` 统一生成最终启动上下文（`IsolatedLaunchPlan`）：
+`core/src/runtime/environment-isolator.ts` compiles an orthogonal 5-layer `IsolatedLaunchPlan` for external CLI execution:
 
-### 层 1：环境变量清洗与覆盖（Env Isolation）
-- **最小白名单（`CLEAN_ENV_KEYS`）**：`daemon` 提供 `spawnPipeClean` 原语，仅保留 OS 运行必需键（`PATH`, `HOME`, `USER`, `LANG`, `TZ`, `TMPDIR`, Windows `SYSTEMROOT/WINDIR/PATHEXT/USERPROFILE/APPDATA`, 代理与 CA 证书键），剥离宿主机可能泄漏的任意 `*_API_KEY` / `*_TOKEN`。
-- **Claude Provider 环境变量归零**：当为 Claude Code 指定自定义模型服务商时，显式清空高优先级干扰变量（`CLAUDE_CODE_USE_BEDROCK=''`, `CLAUDE_CODE_USE_VERTEX=''`, `CLAUDE_CODE_OAUTH_TOKEN=''`, `ANTHROPIC_MODEL=''`, `ANTHROPIC_CUSTOM_HEADERS=''`），并设置 `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1`，防止宿主机 `~/.claude/settings.json` 劫持流量。
+### Layer 1: Environment Sanitization & Provider Scrubbing (`Env Isolation`)
+- **Minimal Allowlist (`CLEAN_ENV_KEYS`)**: `daemon` exposes `spawnPipeClean`, preserving only essential OS keys (`PATH`, `HOME`, `USER`, `LANG`, `TZ`, `TMPDIR`, Windows `SYSTEMROOT/WINDIR/PATHEXT/USERPROFILE/APPDATA`, proxy & CA cert vars) and stripping stray `*_API_KEY` / `*_TOKEN` values from the host shell.
+- **Claude Provider Reset**: Explicit reset of interfering variables (`CLAUDE_CODE_USE_BEDROCK=''`, `CLAUDE_CODE_USE_VERTEX=''`, `CLAUDE_CODE_OAUTH_TOKEN=''`, `ANTHROPIC_MODEL=''`, `ANTHROPIC_CUSTOM_HEADERS=''`) plus `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1` so host `~/.claude/settings.json` cannot hijack provider routing.
 
-### 层 2：配置目录隔离（Home / Config Dir Isolation）
-- 为每个需要隔离的 Agent（或外部账号配置）在 `~/.myagents/agent-homes/<profileKey>/` 建立独立配置目录，启动时注入 `CLAUDE_CONFIG_DIR=<dir>`（未来扩展 Codex 为 `CODEX_HOME`）。
-- 若需跨账号共享历史会话，借鉴 Antumi `agent-account-home.ts` 的 `linkShared`：仅将非凭证子目录（如 `projects/`）通过符号链接（Windows 上使用免管理员权限的 `junction`）按需共享，凭证文件严格留在独立目录中，**绝不修改或污染宿主机用户的 `~/.claude/`**。
+### Layer 2: Config Directory Isolation (`Home / Config Dir Isolation`)
+- Isolated config homes live under `~/.myagents/agent-homes/<profileKey>/` and are injected via `CLAUDE_CONFIG_DIR=<dir>` (and `CODEX_HOME` for Codex).
+- When sharing history across profiles, only non-credential subdirectories (e.g., `projects/`) are linked via symlinks or Windows unprivileged junctions, leaving host `~/.claude/` untouched.
 
-### 层 3：工具权限围栏与双层 Subagent 封堵（Tool & Subagent Fence）
-- **最终生效权限公式**：
+### Layer 3: Tool Permission Fence & Dual-Layer Subagent Blocking
+- **Effective Permission Formula**:
   $$\text{EffectivePermission} = \min(\text{agent.permissionMode},\ \text{node.workspaceMode},\ \text{strategy.workspacePolicy},\ \text{sourceTrustLevel})$$
-- **Claude Code CLI 参数映射表**（由 `IsolationProfile` 编译生成）：
+- **Claude Code CLI Flag Mapping**:
 
-| 场景 / 隔离级别 | `permissionMode` × `workspaceMode` | Claude CLI 关键启动参数 |
+| Isolation Level | `permissionMode` x `workspaceMode` | Claude CLI Flags |
 | :--- | :--- | :--- |
-| **极严锁死（`lockdown`，v0.1b/c 外部自动触发）** | `read-only` + 非信任来源 | `--restricted --tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands --no-chrome --allowedTools mcp__myagents__<readonly_tools>` |
-| **只读分析 / 圆桌讨论（`fenced-ro`）** | `read-only` | `--permission-mode plan`（或 `default` + 禁写）+ `--disallowedTools Edit(//<dir>/**),Write(//<dir>/**),Agent,Task` + `--allowedTools Read,Glob,Grep,Bash(git log:*),Bash(git diff:*),Bash(git show:*)` |
-| **工作区读写（`workspace-rw`）** | `workspace-write` + `shared-rw/worktree` | `--permission-mode acceptEdits`（v0.1 无弹窗模式下自动放行工作区编辑）+ 对只读参考目录加 `--disallowedTools Edit(//<refDir>/**)`；多 Agent 房间必加 `--disallowedTools Agent,Task` |
-| **全权执行（`full`）** | `full` + `shared-rw/worktree` | `--allow-dangerously-skip-permissions --permission-mode bypassPermissions`（Web 配置页显式标红风险提示）；多 Agent 房间仍必加 `--disallowedTools Agent,Task` |
+| **`lockdown` (untrusted external inputs)** | `read-only` + untrusted source | `--restricted --tools "" --strict-mcp-config --setting-sources "" --disable-slash-commands --no-chrome --allowedTools mcp__myagents__<readonly_tools>` |
+| **`fenced-ro` (read-only analysis / roundtable)** | `read-only` | `--permission-mode plan` + `--disallowedTools Edit(//<dir>/**),Write(//<dir>/**),Agent,Task` + `--allowedTools Read,Glob,Grep,Bash(git log:*),Bash(git diff:*),Bash(git show:*)` |
+| **`workspace-rw` (normal coding)** | `workspace-write` + `shared-rw/worktree` | `--permission-mode acceptEdits` + `--disallowedTools Edit(//<refDir>/**)`; multi-agent rooms always add `--disallowedTools Agent,Task` |
+| **`full` (unattended full access)** | `full` + `shared-rw/worktree` | `--allow-dangerously-skip-permissions --permission-mode bypassPermissions` (explicit UI warning); multi-agent rooms still enforce `--disallowedTools Agent,Task` |
 
-> **Windows 路径规则**：借鉴 Antumi `claudeRulePath`，写入 `--allowedTools / --disallowedTools` 的绝对路径必须将 `C:\foo\bar` 转为 POSIX 形式 `//c/foo/bar`。  
-> **安全边界诚实声明**：v0.1 阶段自有文件 API 通过 `resolveContainedPath` 防止越界误操作；但 `workspace_exec`、Web PTY 与开启 `full` 模式的外部 CLI 仍运行在当前 OS 用户权限下，真正强沙箱隔离依赖 Docker 容器或 OS 沙箱运行整套服务端。
+> **Windows Path Normalization**: Following `claudeRulePath`, absolute rule paths passed to `--allowedTools / --disallowedTools` convert `C:\foo\bar` to POSIX `//c/foo/bar`.  
+> **Honest Boundary Note**: Builtin file APIs enforce containment via `resolveContainedPath`, whereas `workspace_exec`, Web PTY, and external CLIs in `full` mode execute under the server OS user unless the deployment runs inside a container or OS sandbox.
 
-### 层 4：工作区、附件与只读参考目录隔离
-- **独立目录角色**：
-  - 主工作区（`cwd`）：Agent 唯一可自由活动的根目录（`agent_private` / `project` / `git_worktree` / `shared`）。
-  - 附件映射目录（`~/.myagents/attachments/<roomId>/`）：**绝不拷进用户 Git 代码仓库**，只通过只读规则 `Read(//<file>)` 精确授权单文件读取。
-  - 只读参考目录 / 知识库（`readonlyRefPaths`）：不传 `--add-dir`（避免 Claude 连带加载其中的 `.claude/skills`），仅授权 `Read(//<refDir>/**)` 且加 `Edit(//<refDir>/**)` 拒绝规则。
-- **Skill 注入**：按配置哈希生成不可变只读目录 `~/.myagents/skills/bundles/<hash>/`，Claude 通过 `--plugin-dir` 挂载（利于 Prompt Cache 保温）。
+### Layer 4: Workspaces, Attachments & Read-Only References
+- **Directory Roles**:
+  - Primary workspace (`cwd`): Only mutable root (`agent_private` / `project` / `git_worktree` / `shared`).
+  - Attachment staging (`~/.myagents/attachments/<roomId>/`): Never copied into user Git repos; exposed selectively via read-only `Read(//<file>)` rules.
+  - Read-only reference paths (`readonlyRefPaths`): Mounted without `--add-dir` (preventing unwanted `.claude/skills` discovery), authorized solely for `Read` and explicitly denied `Edit`.
+- **Immutable Skill Bundles**: Built under `~/.myagents/skills/bundles/<hash>/` for stable `--plugin-dir` mounting and prompt cache locality.
 
-### 层 5：热会话配置漂移检测（`config_hash`）
-- 每次启动外部 CLI 会话时，将影响行为的配置（`model`、`systemPrompt`、`isolationProfile`、`skillBundleHash`、`mcpConfigHash`）计算 SHA-256 存入 `agent_sessions.config_hash`。
-- 下一回合开始前若发现当前配置哈希与存活进程不一致，自动优雅结束旧进程并按新配置无感重启续接（保留 `native_session_id`），彻底杜绝“改了人设/权限但热进程不生效”。
-
----
-
-## 4. 极薄 Daemon、热重启接管与抗重启 MCP 桥
-
-### 4.1 进程隔离与启动对账（Reconcile）
-`core` 启动时在放开写接口和启动调度器之前，必须完成严格 6 步对账（期间 `system.hello` 返回 `reconciling: true`）：
-1. 连接 `daemon`（Unix Socket `0600` / Windows Named Pipe），执行 `daemon.list()`。
-2. 对账 `terminal_sessions`：存活终端保持可附着，已消失终端标记 `exited`。
-3. 对账存活的外部 CLI `agent_sessions`：通过 `ChatHost`（先置 `attached = false` 暂存新 `data` → 调用 `daemon.attach(sessionId)` 拉回缓冲 → 按 `offset` 排序去重喂给 `LineFramer(last_consumed_offset)` → 置 `attached = true`）。若 `bufferStart > last_consumed_offset`（缓冲溢出缺口），显式标当前 `WorkNode` 为 `failed(output_gap)`，不静默错位。
-4. 对账所有 `status IN ('starting', 'running')` 的 `work_nodes`：
-   - 外部 CLI 成功接管且回合未结束 → 重建内存锁与活跃配额占用继续监听；
-   - `builtin` 进程内任务或进程已丢失 → 标 `failed(core_restarted)`；
-   - 卡在 `starting`（如建 Worktree 中断）→ 清理半成品并回退 `failed(core_restarted)`。
-5. 扫描恢复所有 `status = 'pending'` 的 `work_deliveries`（两阶段投递防漏唤醒）。
-6. 解除 `reconciling` 门禁，启动 `Scheduler.tick()`。
-
-### 4.2 抗重启内置 MCP 桥（v0.1b 落地，复用 Antumi `mcp-main.ts`）
-- `core` 启动时将监听端口与随机 `internalToken` 写入 `~/.myagents/run/core.json`（权限 `0600`）。
-- 外部 CLI 不直接连易变的 HTTP URL query token，而是启动独立轻量 stdio MCP 子进程（`node mcp-main.js --session <sessionId>`）；该子进程每次收到工具调用时从 `core.json` 读取最新地址与 Token 转发给 `core`，**即使 `core` 中途重启，外部 CLI 的 MCP 连接也不断裂、不报 401**。
+### Layer 5: Live Session Config Drift Detection (`config_hash`)
+- SHA-256 hash over effective runtime inputs (`model`, `systemPrompt`, `isolationProfile`, `skillBundleHash`, `mcpConfigHash`) stored in `agent_sessions.config_hash`.
+- On subsequent turns, hash mismatch triggers graceful teardown and transparent CLI relaunch preserving `native_session_id`.
 
 ---
 
-## 5. 双轨 Agent 运行时与无竞态协作引擎
+## 4. Thin Daemon, Hot-Restart Reattachment & Restart-Resilient MCP Bridge
 
-### 5.1 内置轻量 Agent（`BuiltinDriver`，v0.1a 核心自研）
-- 跑在 `core` 进程内，直连 `ModelProvider`（OpenAI Chat Completions / Responses / Anthropic 兼容格式），使用 `AbortController` 精准取消。
-- 流式 Token 与工具调用经 `emit()` 实时推给 Web 端（内存节流合并，绝不逐 Token 写 SQLite），每步工具完成后批量落库 `node_events`。
-- 内置 `maxSteps`（默认 25）、单步工具超时与网络 429/5xx 指数退避重试（**网络重试仅存在于 LLM Client 这一层，严禁外层队列叠加重试**）。
+### 4.1 Startup Reconciliation (6-Step Gate)
+Before accepting mutating RPCs or starting `Scheduler.tick()` (`system.hello` reports `reconciling: true`), `core` runs:
+1. Connect to `daemon` (`0600` Unix Socket / Windows Named Pipe) and invoke `daemon.list()`.
+2. Reconcile `terminal_sessions`: reattach live PTYs, mark missing ones `exited`.
+3. Reconcile live external CLI `agent_sessions` via `ChatHost` (buffer new `data` with `attached = false` -> `daemon.attach(sessionId)` -> offset-ordered replay into `LineFramer(last_consumed_offset)` -> set `attached = true`). If `bufferStart > last_consumed_offset`, explicitly fail the active `WorkNode` with `failed(output_gap)` rather than corrupting framing.
+4. Reconcile `work_nodes` with `status IN ('starting', 'running')`:
+   - Reattached CLI still running -> restore in-memory locks & concurrency slot;
+   - In-process `builtin` turn or missing child -> transition to `failed(core_restarted)`;
+   - Interrupted `starting` setup -> clean partial artifacts and mark `failed(core_restarted)`.
+5. Recover any `work_deliveries` in `status = 'pending'`.
+6. Lift the `reconciling` gate and trigger `Scheduler.tick()`.
 
-### 5.2 统一 `CollabEngine`：Reducer + 双节拍调度
+### 4.2 Restart-Resilient Builtin MCP Bridge (`v0.1b`, adapted from Antumi `mcp-main.ts`)
+- `core` writes its ephemeral listen port and `internalToken` to `~/.myagents/run/core.json` (`0600`).
+- External CLIs spawn a thin stdio child process (`node mcp-main.js --session <sessionId>`) which reads `core.json` per tool call, ensuring CLI MCP connections survive `core` restarts without HTTP 401 failures.
+
+---
+
+## 5. Dual-Track Runtime & Race-Free Collaboration Engine
+
+### 5.1 Builtin Agent (`BuiltinDriver`)
+- Runs inside `core` against `ModelProvider` endpoints with exact `AbortController` cancellation.
+- Token deltas and tool events stream over WS while batched updates persist to `node_events`.
+- Enforces `maxSteps` (default 25), per-tool timeouts, and bounded exponential backoff on HTTP 429/5xx solely inside the LLM client (no stacked queue retries).
+
+### 5.2 Unified `CollabEngine`: Reducer + Dual Execution Beats
 ```mermaid
 flowchart LR
-  EV["事件: 发消息 / MCP回调 / 节点终态 / 人工控制"] --> ACT["Per-Room Actor 串行链\nserially(roomId)"]
-  ACT --> TX["同步 SQLite 事务 (零 await)\n读快照 → 跑 CollabStrategy → Reducer归约\n写 messages / work_nodes / strategy_state"]
-  TX --> TICK["全局 Scheduler.tick() 单飞"]
-  TICK --> CAS["同步预留 CAS\n查 deps + 写优先RWLock + 配额\n原子置 starting + leaseToken"]
-  CAS --> IO["锁外异步执行 (带 AbortController)\nWorktree / CLI握手 / runTurn\n每步 await 后复核 leaseToken"]
-  IO -->|终态释放锁与配额| ACT
+  EV["Events: message / MCP callback / settled node / manual control"] --> ACT["Per-Room Actor Serial Queue\nserially(roomId)"]
+  ACT --> TX["Sync SQLite Tx (zero await)\nRead snapshot -> CollabStrategy -> Reducer\nWrite messages / work_nodes / strategy_state"]
+  TX --> TICK["Global Scheduler.tick() coalesced"]
+  TICK --> CAS["Sync CAS Reservation\ndeps + writer-pref RWLock + slots\nSet starting + leaseToken"]
+  CAS --> IO["Unlocked Async IO (AbortController)\nWorktree / CLI start / runTurn\nVerify leaseToken after each await"]
+  IO -->|Release locks & slot on settle| ACT
 ```
-- **全局标配 Reducer 归约**：所有策略状态变更均通过不可变 `StateDelta` 经纯函数 `reduceState(prev, delta)` 在同步事务内合并，杜绝并发节点后写覆盖先写。
-- **双节拍原生支持**：
-  - **`event-driven`**：适合 `single` 单聊与 `open-channel` 开放协作群，无全局阻塞，支持异步自由并发与人类随时插话。
-  - **`superstep`**（借鉴 LangGraph Pregel BSP）：适合 `roundtable` 圆桌、`draft-review` 评审、`split-research` 调研；每个超步内成员只读上一超步冻结视图（天然盲答隔离），全员到达屏障后由 Reducer 一次性归约状态、推进 `visible_seq` 并落盘检查点。
+- **Pure State Reduction**: All strategy state transitions emit immutable `StateDelta` patches merged synchronously via `reduceState(prev, delta)` to prevent lost updates across concurrent nodes.
+- **Dual Execution Models**:
+  - **`event-driven`**: Used by `single` and `open-channel` for non-blocking concurrency and user steering at any point.
+  - **`superstep`** (Pregel BSP inspired): Used by `roundtable` (`draft-review`, `split-research`). Nodes inside superstep `k` read only the frozen view from `k - 1` (blind isolation); once all nodes reach the barrier, a single transaction runs `reduceState`, advances `visible_seq`, and checkpoints the next step.
 
 ---
 
-## 6. 存储、备份与最低安全基线
+## 6. Storage Layout & Security Baseline
 
-### 6.1 目录结构（`MYAGENTS_HOME=~/.myagents`）
+### 6.1 Directory Layout (`MYAGENTS_HOME=~/.myagents`)
 ```text
 ~/.myagents/
-├── data/myagents.db           # SQLite WAL 唯一状态真相源 (node:sqlite)
-├── blobs/<aa>/<bb>/<sha256>   # 无扩展名内容寻址去重附件库
-├── attachments/<roomId>/      # 按需映射给外部 CLI 只读的临时硬链/副本（不污染 Git 仓）
+├── data/myagents.db            # SQLite WAL single source of truth (node:sqlite)
+├── blobs/<aa>/<bb>/<sha256>    # Extensionless content-addressed blob storage
+├── attachments/<roomId>/       # Read-only staged attachments for CLIs
 ├── workspaces/
-│   ├── agents/<agentId>/      # Agent 私有持久工作区
-│   └── rooms/<roomId>/        # 群聊共享工作区
-├── worktrees/<shortId>/<repo>/# 8位短ID防 Windows 260字符路径超限
-├── agent-homes/<profileKey>/  # 隔离配置目录（CLAUDE_CONFIG_DIR 等，v0.1b）
-├── skills/{repos,bundles}/    # Skill 仓库与内容哈希不可变 bundle
-└── run/{daemon.sock,core.json}# 0600 权限运行时端点文件
+│   ├── agents/<agentId>/       # Persistent per-agent private workspaces
+│   └── rooms/<roomId>/         # Shared channel workspaces
+├── worktrees/<shortId>/<repo>/ # 8-char short ID avoiding Windows MAX_PATH issues
+├── agent-homes/<profileKey>/   # Isolated CLI config homes (CLAUDE_CONFIG_DIR)
+├── skills/{repos,bundles}/     # Immutable skill bundle directories
+└── run/{daemon.sock,core.json} # 0600 runtime IPC descriptors
 ```
 
-### 6.2 最低安全基线（v0.1a 落地，约 150 行）
-- `AuthGuard` 默认注入 **`SimplePasswordAuthGuard`**：`admin / admin`（`scryptSync` 加盐哈希，可改密）+ `auth_sessions` 持久化 Cookie + Bearer Token + WS 握手同源 `Origin` 校验。
-- `Webhook`（v0.1c）强制校验 `X-Webhook-Secret` / HMAC，自动路由节点默认 `read-only` 降权。
-- 其余 3 个安全 Hook（`SecretProvider`、`Redactor`、`ApprovalGate`）在 v0.1a 保持清晰接口与轻量/Noop 实现，后续零侵入替换。
+### 6.2 Security Baseline
+- `AuthGuard` ships with `SimplePasswordAuthGuard` (`admin / admin` default via `scryptSync` salted hashes) + persistent `auth_sessions` cookies + Bearer tokens + CSWSH `Origin` checks.
+- Inbound `Webhook` routes enforce `X-Webhook-Secret` / HMAC signatures and run dispatched turns in `read-only` Lockdown mode by default.
+- Remaining security hooks (`SecretProvider`, `Redactor`, `ApprovalGate`) maintain clean extension interfaces for pluggable policy enforcement.
