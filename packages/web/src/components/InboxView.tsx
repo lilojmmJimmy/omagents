@@ -1,12 +1,16 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   CheckCircle2,
   Copy,
+  Download,
   ExternalLink,
   Filter,
   Inbox,
   KeyRound,
+  Paperclip,
   Plus,
+  RefreshCw,
+  Reply,
   Send,
   ShieldAlert,
   Trash2,
@@ -14,8 +18,8 @@ import {
   Workflow,
   X
 } from 'lucide-react'
-import type { InboxItem, InboxStatus, RoutingMatchType } from '@myagents/protocol'
-import { rpc } from '../api/rpc-client'
+import type { FileRef, InboxItem, InboxStatus, RoutingMatchType } from '@myagents/protocol'
+import { apiUploadBlob, blobUrl, rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
 type InboxSubTab = 'items' | 'webhooks' | 'rules'
@@ -55,6 +59,13 @@ export function InboxView() {
   const [manualTitle, setManualTitle] = useState('')
   const [manualContent, setManualContent] = useState('')
   const [manualAuthor, setManualAuthor] = useState('admin')
+  const [manualAttachments, setManualAttachments] = useState<FileRef[]>([])
+  const [manualUploading, setManualUploading] = useState(false)
+
+  // Outbound reply composer state
+  const [replyOpenId, setReplyOpenId] = useState<string | null>(null)
+  const [replyDraft, setReplyDraft] = useState('')
+  const [replySending, setReplySending] = useState(false)
 
   // Assign modal state
   const [assignTarget, setAssignTarget] = useState<InboxItem | null>(null)
@@ -70,10 +81,26 @@ export function InboxView() {
   const [createdHookSecret, setCreatedHookSecret] = useState<{ id: string; name: string; secret: string } | null>(null)
   const [copiedSecret, setCopiedSecret] = useState(false)
 
-  // Plugin instance form
+  // Plugin instance form (GitHub / Email)
   const [pluginId, setPluginId] = useState('github-webhook')
   const [pluginName, setPluginName] = useState('')
   const [pluginSecret, setPluginSecret] = useState('')
+  const [ghRepo, setGhRepo] = useState('')
+  const [ghToken, setGhToken] = useState('')
+  const [ghLabels, setGhLabels] = useState('')
+  const [ghIncludePrs, setGhIncludePrs] = useState(true)
+  const [imapHost, setImapHost] = useState('')
+  const [imapPort, setImapPort] = useState(993)
+  const [imapSecure, setImapSecure] = useState(true)
+  const [imapUser, setImapUser] = useState('')
+  const [imapPass, setImapPass] = useState('')
+  const [imapMailbox, setImapMailbox] = useState('INBOX')
+  const [smtpHost, setSmtpHost] = useState('')
+  const [smtpPort, setSmtpPort] = useState(465)
+  const [smtpSecure, setSmtpSecure] = useState(true)
+  const [fromAddress, setFromAddress] = useState('')
+  const [pluginAutoReply, setPluginAutoReply] = useState(true)
+  const [syncingInstanceId, setSyncingInstanceId] = useState<string | null>(null)
 
   // Rule creation state
   const [ruleName, setRuleName] = useState('')
@@ -83,6 +110,7 @@ export function InboxView() {
   const [ruleMatchExpr, setRuleMatchExpr] = useState('')
   const [ruleAllowWrite, setRuleAllowWrite] = useState(false)
   const [ruleStrategyId, setRuleStrategyId] = useState<'single' | 'open-channel' | 'roundtable'>('open-channel')
+  const [ruleWorkspaceId, setRuleWorkspaceId] = useState('')
   const [ruleAgentIds, setRuleAgentIds] = useState<string[]>(() => agents.slice(0, 1).map((a) => a.id))
 
   const visibleItems = statusFilter === 'all' ? inboxItems : inboxItems.filter((i) => i.status === statusFilter)
@@ -97,6 +125,25 @@ export function InboxView() {
     setAssignAllowWrite(false)
   }
 
+  const handleManualFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setError(null)
+    setManualUploading(true)
+    try {
+      const uploaded: FileRef[] = []
+      for (const f of Array.from(files)) {
+        uploaded.push(await apiUploadBlob(f))
+      }
+      setManualAttachments((prev) => [...prev, ...uploaded].slice(0, 10))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload attachment')
+    } finally {
+      setManualUploading(false)
+      e.target.value = ''
+    }
+  }
+
   const handleCreateManual = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -104,14 +151,45 @@ export function InboxView() {
       await rpc.call('inbox.createManual', {
         title: manualTitle,
         content: manualContent,
-        authorName: manualAuthor
+        authorName: manualAuthor,
+        attachmentFileIds: manualAttachments.map((a) => a.fileId)
       })
       setManualTitle('')
       setManualContent('')
+      setManualAttachments([])
       setManualOpen(false)
       await refreshInbox()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建工单失败')
+      setError(err instanceof Error ? err.message : 'Failed to create ticket')
+    }
+  }
+
+  const handleDeleteItem = async (item: InboxItem) => {
+    if (!confirm(`Delete inbox item "${item.title}"?`)) return
+    setError(null)
+    try {
+      await rpc.call('inbox.delete', { itemId: item.id })
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete item')
+    }
+  }
+
+  const handleSendReply = async (itemId: string) => {
+    setError(null)
+    setReplySending(true)
+    try {
+      await rpc.call('inbox.reply', {
+        itemId,
+        text: replyDraft.trim() || undefined
+      })
+      setReplyOpenId(null)
+      setReplyDraft('')
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Outbound reply failed')
+    } finally {
+      setReplySending(false)
     }
   }
 
@@ -173,17 +251,70 @@ export function InboxView() {
     e.preventDefault()
     setError(null)
     try {
+      let config: Record<string, unknown> = {}
+      if (pluginId === 'email-imap-smtp') {
+        config = {
+          imapHost,
+          imapPort: Number(imapPort) || 993,
+          imapSecure,
+          imapUser,
+          imapPass,
+          mailbox: imapMailbox.trim() || 'INBOX',
+          smtpHost: smtpHost.trim() || undefined,
+          smtpPort: Number(smtpPort) || 465,
+          smtpSecure,
+          fromAddress: fromAddress.trim() || undefined,
+          autoReplyOnResolve: pluginAutoReply
+        }
+      } else {
+        config = {
+          ...(pluginSecret.trim() ? { webhookSecret: pluginSecret.trim() } : {}),
+          ...(ghRepo.trim() ? { repository: ghRepo.trim() } : {}),
+          ...(ghToken.trim() ? { token: ghToken.trim() } : {}),
+          ...(ghLabels.trim() ? { labels: ghLabels.trim() } : {}),
+          includePullRequests: ghIncludePrs,
+          autoReplyOnResolve: pluginAutoReply
+        }
+      }
       await rpc.call('plugins.configure', {
         pluginId,
         name: pluginName,
-        config: pluginSecret.trim() ? { webhookSecret: pluginSecret.trim() } : {},
+        config,
         enabled: true
       })
       setPluginName('')
       setPluginSecret('')
+      setGhRepo('')
+      setGhToken('')
+      setGhLabels('')
+      setImapPass('')
       await refreshInbox()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '配置插件失败')
+      setError(err instanceof Error ? err.message : 'Failed to configure plugin')
+    }
+  }
+
+  const handleSyncPlugin = async (instanceId: string) => {
+    setError(null)
+    setSyncingInstanceId(instanceId)
+    try {
+      await rpc.call('plugins.syncNow', { instanceId }, 60_000)
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Plugin sync failed')
+    } finally {
+      setSyncingInstanceId(null)
+    }
+  }
+
+  const handleDeletePluginInstance = async (id: string, name: string) => {
+    if (!confirm(`Delete plugin instance "${name}"?`)) return
+    setError(null)
+    try {
+      await rpc.call('plugins.delete', { id })
+      await refreshInbox()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete plugin instance')
     }
   }
 
@@ -203,14 +334,16 @@ export function InboxView() {
         action: {
           mode: 'create_room',
           strategyId: ruleStrategyId,
-          agentIds: selectedAgents
+          agentIds: selectedAgents,
+          workspaceId: ruleWorkspaceId || null
         }
       })
       setRuleName('')
       setRuleMatchExpr('')
+      setRuleWorkspaceId('')
       await refreshInbox()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存路由规则失败')
+      setError(err instanceof Error ? err.message : 'Failed to save routing rule')
     }
   }
 
@@ -341,13 +474,37 @@ export function InboxView() {
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                   />
                 </div>
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => setManualOpen(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
-                    取消
-                  </button>
-                  <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
-                    入箱并匹配规则
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <label className="inline-flex items-center gap-1 px-2.5 py-1 border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg cursor-pointer text-[#555]">
+                      <Paperclip size={12} />
+                      <span>{manualUploading ? 'Uploading...' : 'Attach Files'}</span>
+                      <input type="file" multiple className="hidden" onChange={(e) => void handleManualFileSelect(e)} />
+                    </label>
+                    {manualAttachments.map((att) => (
+                      <span
+                        key={att.fileId}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#f5f5f5] border border-[#e2e2e2] text-[11px]"
+                      >
+                        <span className="truncate max-w-[140px]">{att.filename}</span>
+                        <button
+                          type="button"
+                          onClick={() => setManualAttachments((prev) => prev.filter((x) => x.fileId !== att.fileId))}
+                          className="text-[#888] hover:text-red-600 cursor-pointer"
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setManualOpen(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
+                      取消
+                    </button>
+                    <button type="submit" disabled={manualUploading} className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                      入箱并匹配规则
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
@@ -360,6 +517,9 @@ export function InboxView() {
               <div className="space-y-2.5">
                 {visibleItems.map((item) => {
                   const badge = statusBadge(item.status)
+                  const replyInfo = (item.rawMeta?._reply as
+                    | { status?: string; error?: string; sentAt?: number }
+                    | undefined)
                   return (
                     <div key={item.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-2">
                       <div className="flex items-start justify-between gap-3">
@@ -367,6 +527,19 @@ export function InboxView() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${badge.cls}`}>{badge.label}</span>
                             <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">{item.source}</span>
+                            {replyInfo?.status === 'sent' && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
+                                Replied
+                              </span>
+                            )}
+                            {replyInfo?.status === 'failed' && (
+                              <span
+                                className="text-[11px] px-1.5 py-0.5 rounded bg-red-50 text-red-700"
+                                title={replyInfo.error}
+                              >
+                                Reply failed
+                              </span>
+                            )}
                             <span className="text-sm font-medium text-[#111] truncate">{item.title}</span>
                           </div>
                           <div className="text-[11px] text-[#888] flex items-center gap-3 flex-wrap">
@@ -404,6 +577,20 @@ export function InboxView() {
                             <Send size={11} />
                             <span>指派处理</span>
                           </button>
+                          {item.replyTarget && item.sourceInstanceId !== 'default' && item.sourceInstanceId !== 'manual' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyOpenId(replyOpenId === item.id ? null : item.id)
+                                setReplyDraft('')
+                              }}
+                              className="flex items-center gap-1 px-2 py-1 text-xs border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg text-[#333] cursor-pointer"
+                              title="Send outbound reply via source channel"
+                            >
+                              <Reply size={11} />
+                              <span>Reply</span>
+                            </button>
+                          )}
                           {item.status !== 'resolved' && (
                             <button
                               type="button"
@@ -422,11 +609,63 @@ export function InboxView() {
                               忽略
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteItem(item)}
+                            className="p-1 text-[#888] hover:text-red-600 cursor-pointer"
+                            title="Delete inbox item"
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </div>
                       <p className="text-xs text-[#444] whitespace-pre-wrap line-clamp-3 bg-[#fafafa] border border-[#f0f0f0] rounded-lg p-2.5">
                         {item.content}
                       </p>
+                      {item.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.attachments.map((att) => (
+                            <a
+                              key={att.fileId}
+                              href={blobUrl(att.fileId, true)}
+                              download={att.filename}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#f5f5f5] border border-[#e3e3e3] text-[11px] text-[#333] hover:text-[#c2542d]"
+                            >
+                              <Download size={10} />
+                              <span className="max-w-[180px] truncate">{att.filename}</span>
+                              <span className="text-[#888]">({att.sizeBytes}B)</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {replyOpenId === item.id && (
+                        <div className="border-t border-[#efefef] pt-2.5 space-y-2 text-xs">
+                          <textarea
+                            rows={2}
+                            value={replyDraft}
+                            onChange={(e) => setReplyDraft(e.target.value)}
+                            placeholder="Optional custom reply text (leave empty to use agent resolution summary)..."
+                            className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setReplyOpenId(null)}
+                              className="px-2.5 py-1 border border-[#dcdcdc] rounded-lg cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={replySending}
+                              onClick={() => void handleSendReply(item.id)}
+                              className="px-2.5 py-1 bg-[#c2542d] text-white rounded-lg font-medium disabled:opacity-50 cursor-pointer"
+                            >
+                              {replySending ? 'Sending...' : 'Send Reply'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -511,54 +750,232 @@ export function InboxView() {
 
             {/* SourcePlugin Registry & Instances */}
             <div className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
-              <div className="text-xs font-medium text-[#333]">SourcePlugin 来源插件配置（如 GitHub Webhook）</div>
-              <form onSubmit={handleConfigurePlugin} className="grid grid-cols-4 gap-2.5 text-xs">
-                <select
-                  value={pluginId}
-                  onChange={(e) => setPluginId(e.target.value)}
-                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
-                >
-                  {pluginDescriptors.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  required
-                  value={pluginName}
-                  onChange={(e) => setPluginName(e.target.value)}
-                  placeholder="实例名称（如 my-repo）"
-                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
-                />
-                <input
-                  value={pluginSecret}
-                  onChange={(e) => setPluginSecret(e.target.value)}
-                  placeholder="Webhook HMAC Secret（可选）"
-                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
-                />
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-[#111] text-white rounded-lg cursor-pointer"
-                >
-                  创建插件实例
-                </button>
+              <div className="text-xs font-medium text-[#333]">Channel Plugins (GitHub & Email IMAP/SMTP)</div>
+              <form onSubmit={handleConfigurePlugin} className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <select
+                    value={pluginId}
+                    onChange={(e) => setPluginId(e.target.value)}
+                    className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                  >
+                    {pluginDescriptors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    required
+                    value={pluginName}
+                    onChange={(e) => setPluginName(e.target.value)}
+                    placeholder="Instance name (e.g. my-repo or support-mailbox)"
+                    className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                  />
+                </div>
+
+                {pluginId === 'email-imap-smtp' ? (
+                  <div className="space-y-2.5 border border-[#efefef] rounded-lg p-3 bg-[#fafafa]">
+                    <div className="grid grid-cols-4 gap-2">
+                      <input
+                        required
+                        value={imapHost}
+                        onChange={(e) => setImapHost(e.target.value)}
+                        placeholder="IMAP host (e.g. imap.gmail.com)"
+                        className="col-span-2 px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <input
+                        type="number"
+                        value={imapPort}
+                        onChange={(e) => setImapPort(Number(e.target.value))}
+                        placeholder="IMAP port"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <label className="flex items-center gap-1.5 px-2 text-[#555] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={imapSecure}
+                          onChange={(e) => setImapSecure(e.target.checked)}
+                        />
+                        <span>IMAP TLS</span>
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        required
+                        value={imapUser}
+                        onChange={(e) => setImapUser(e.target.value)}
+                        placeholder="IMAP username / email"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <input
+                        required
+                        type="password"
+                        value={imapPass}
+                        onChange={(e) => setImapPass(e.target.value)}
+                        placeholder="IMAP password or env:EMAIL_PASS"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <input
+                        value={imapMailbox}
+                        onChange={(e) => setImapMailbox(e.target.value)}
+                        placeholder="Mailbox (INBOX)"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <input
+                        value={smtpHost}
+                        onChange={(e) => setSmtpHost(e.target.value)}
+                        placeholder="SMTP host (optional for reply)"
+                        className="col-span-2 px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <input
+                        type="number"
+                        value={smtpPort}
+                        onChange={(e) => setSmtpPort(Number(e.target.value))}
+                        placeholder="SMTP port"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <label className="flex items-center gap-1.5 px-2 text-[#555] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={smtpSecure}
+                          onChange={(e) => setSmtpSecure(e.target.checked)}
+                        />
+                        <span>SMTP TLS</span>
+                      </label>
+                    </div>
+                    <input
+                      value={fromAddress}
+                      onChange={(e) => setFromAddress(e.target.value)}
+                      placeholder="From address override (optional, defaults to IMAP username)"
+                      className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                    />
+                  </div>
+                ) : pluginId === 'github-webhook' ? (
+                  <div className="space-y-2 border border-[#efefef] rounded-lg p-3 bg-[#fafafa]">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        value={pluginSecret}
+                        onChange={(e) => setPluginSecret(e.target.value)}
+                        placeholder="Webhook HMAC Secret (optional)"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                      <input
+                        value={ghRepo}
+                        onChange={(e) => setGhRepo(e.target.value)}
+                        placeholder="Repository owner/repo (optional for Pull)"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white font-mono"
+                      />
+                      <input
+                        type="password"
+                        value={ghToken}
+                        onChange={(e) => setGhToken(e.target.value)}
+                        placeholder="PAT token or env:GITHUB_TOKEN (optional)"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white font-mono"
+                      />
+                      <input
+                        value={ghLabels}
+                        onChange={(e) => setGhLabels(e.target.value)}
+                        placeholder="Labels filter (comma-separated, optional)"
+                        className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                      />
+                    </div>
+                    <label className="inline-flex items-center gap-1.5 text-[#555] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={ghIncludePrs}
+                        onChange={(e) => setGhIncludePrs(e.target.checked)}
+                      />
+                      <span>Include Pull Requests when polling</span>
+                    </label>
+                  </div>
+                ) : (
+                  <input
+                    value={pluginSecret}
+                    onChange={(e) => setPluginSecret(e.target.value)}
+                    placeholder="Optional configuration secret"
+                    className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
+                  />
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  <label className="inline-flex items-center gap-1.5 text-[#555] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pluginAutoReply}
+                      onChange={(e) => setPluginAutoReply(e.target.checked)}
+                    />
+                    <span>Auto-reply to external channel when resolved</span>
+                  </label>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-[#111] text-white rounded-lg cursor-pointer"
+                  >
+                    Create Plugin Instance
+                  </button>
+                </div>
               </form>
               {pluginInstances.length > 0 && (
                 <div className="divide-y divide-[#f0f0f0] border-t border-[#efefef] pt-2">
-                  {pluginInstances.map((inst) => (
-                    <div key={inst.id} className="py-2 flex items-center justify-between text-xs">
-                      <div>
-                        <span className="font-medium text-[#111]">{inst.name}</span>
-                        <span className="ml-2 font-mono text-[11px] text-[#777]">
-                          POST {window.location.origin}/webhooks/{inst.pluginId}/{inst.id}
-                        </span>
+                  {pluginInstances.map((inst) => {
+                    const desc = pluginDescriptors.find((d) => d.id === inst.pluginId)
+                    return (
+                      <div key={inst.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-[#111]">{inst.name}</span>
+                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555]">
+                              {inst.pluginId}
+                            </span>
+                            {desc?.supportsWebhook && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">Webhook</span>
+                            )}
+                            {desc?.supportsPull && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">Pull</span>
+                            )}
+                            {desc?.supportsReply && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Reply</span>
+                            )}
+                          </div>
+                          {desc?.supportsWebhook && (
+                            <div className="font-mono text-[11px] text-[#777] truncate">
+                              POST {window.location.origin}/webhooks/{inst.pluginId}/{inst.id}
+                            </div>
+                          )}
+                          {inst.lastSyncAt && (
+                            <div className="text-[11px] text-[#888]">
+                              Last sync: {new Date(inst.lastSyncAt).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {desc?.supportsPull && (
+                            <button
+                              type="button"
+                              disabled={syncingInstanceId === inst.id}
+                              onClick={() => void handleSyncPlugin(inst.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 border border-[#dcdcdc] hover:border-[#c2542d] rounded-md cursor-pointer disabled:opacity-50"
+                            >
+                              <RefreshCw size={11} className={syncingInstanceId === inst.id ? 'animate-spin' : ''} />
+                              <span>{syncingInstanceId === inst.id ? 'Syncing...' : 'Sync Now'}</span>
+                            </button>
+                          )}
+                          <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                            {inst.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeletePluginInstance(inst.id, inst.name)}
+                            className="p-1 text-[#888] hover:text-red-600 cursor-pointer"
+                            title="Delete plugin instance"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-                        {inst.enabled ? '已启用' : '已禁用'}
-                      </span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -601,7 +1018,7 @@ export function InboxView() {
                   <option value="roundtable">圆桌讨论室 (roundtable)</option>
                 </select>
               </div>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-4 gap-2.5">
                 <select
                   value={ruleMatchType}
                   onChange={(e) => setRuleMatchType(e.target.value as RoutingMatchType)}
@@ -618,6 +1035,21 @@ export function InboxView() {
                   placeholder={ruleMatchType === 'always' ? '留空匹配全部' : '匹配表达式（如 urgent,bug）'}
                   className="col-span-2 px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg font-mono"
                 />
+                <select
+                  value={ruleWorkspaceId}
+                  onChange={(e) => setRuleWorkspaceId(e.target.value)}
+                  className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
+                  title="Optional target workspace"
+                >
+                  <option value="">Default Agent Workspace</option>
+                  {workspaces
+                    .filter((w) => w.kind === 'project')
+                    .map((w) => (
+                      <option key={w.id} value={w.id}>
+                        [Project] {w.name}
+                      </option>
+                    ))}
+                </select>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <div className="flex flex-wrap items-center gap-3">
@@ -678,6 +1110,9 @@ export function InboxView() {
                       </div>
                       <div className="text-[11px] text-[#888]">
                         目标策略：{r.action.strategyId || 'open-channel'} · 来源过滤：{r.sourceFilter || '*'}
+                        {r.action.workspaceId
+                          ? ` · Workspace: ${workspaces.find((w) => w.id === r.action.workspaceId)?.name || r.action.workspaceId}`
+                          : ''}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

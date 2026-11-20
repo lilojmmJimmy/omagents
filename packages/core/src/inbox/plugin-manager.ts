@@ -1,9 +1,15 @@
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
-import type { PluginDescriptor, PluginInstance, SecretProvider } from '@myagents/protocol'
+import { randomUUID } from 'node:crypto'
+import type { FileRef, PluginDescriptor, PluginInstance, Redactor, SecretProvider } from '@myagents/protocol'
 import type { InboundEnvelope, PluginContext, SourcePlugin } from '@myagents/plugin-sdk'
 import { z } from 'zod'
 import { Errors } from '../errors'
+import type { BlobService } from '../storage/blob-service'
 import type { CoreDatabase } from '../storage/database'
+import { emailPlugin } from './plugins/email-plugin'
+import { githubPlugin } from './plugins/github-plugin'
+
+const SECRET_CONFIG_KEYS = new Set(['webhookSecret', 'token', 'imapPass', 'smtpPass', 'password', 'secret'])
+const MASKED_SECRET = '••••••••'
 
 interface PluginInstanceRow {
   id: string
@@ -17,24 +23,30 @@ interface PluginInstanceRow {
   updated_at: number
 }
 
-function mapInstance(row: PluginInstanceRow): PluginInstance {
+function maskConfig(config: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...config }
+  for (const key of SECRET_CONFIG_KEYS) {
+    const val = out[key]
+    if (typeof val === 'string' && val.length > 0) {
+      out[key] = MASKED_SECRET
+    }
+  }
+  return out
+}
+
+function mapInstance(row: PluginInstanceRow, maskSecrets: boolean): PluginInstance {
+  const rawConfig = JSON.parse(row.config_json || '{}') as Record<string, unknown>
   return {
     id: row.id,
     pluginId: row.plugin_id,
     name: row.name,
-    config: JSON.parse(row.config_json || '{}') as Record<string, unknown>,
+    config: maskSecrets ? maskConfig(rawConfig) : rawConfig,
     cursor: row.cursor,
     enabled: Boolean(row.enabled),
     lastSyncAt: row.last_sync_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
-}
-
-function timingSafeHexEqual(aHex: string, bHex: string): boolean {
-  const a = Buffer.from(aHex.toLowerCase(), 'utf8')
-  const b = Buffer.from(bHex.toLowerCase(), 'utf8')
-  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 export const genericWebhookPlugin: SourcePlugin<{ description?: string }> = {
@@ -75,69 +87,18 @@ export const genericWebhookPlugin: SourcePlugin<{ description?: string }> = {
   }
 }
 
-export const githubWebhookPlugin: SourcePlugin<{ webhookSecret?: string; repository?: string }> = {
-  id: 'github-webhook',
-  name: 'GitHub Webhook (Issues / PRs / Comments)',
-  configSchema: z.object({
-    webhookSecret: z.string().optional(),
-    repository: z.string().optional()
-  }).passthrough(),
-  async parseWebhook(ctx, req): Promise<InboundEnvelope[]> {
-    const secret = typeof ctx.config?.webhookSecret === 'string' ? ctx.config.webhookSecret.trim() : ''
-    if (secret) {
-      const sigHeader = req.headers['x-hub-signature-256'] || ''
-      const expected = 'sha256=' + createHmac('sha256', secret).update(req.rawBody).digest('hex')
-      if (!sigHeader || !timingSafeHexEqual(sigHeader, expected)) {
-        throw Errors.unauthorized('Invalid GitHub X-Hub-Signature-256')
-      }
-    }
+export { githubPlugin as githubWebhookPlugin }
 
-    let payload: Record<string, unknown>
-    try {
-      payload = JSON.parse(req.rawBody.toString('utf8')) as Record<string, unknown>
-    } catch {
-      throw Errors.invalidParams('Invalid GitHub webhook JSON body')
-    }
-
-    const event = String(req.headers['x-github-event'] || payload.event || 'issue')
-    const action = typeof payload.action === 'string' ? payload.action : 'opened'
-    const repo = ((payload.repository as Record<string, unknown> | undefined)?.full_name as string | undefined) || 'unknown/repo'
-    const sender = ((payload.sender as Record<string, unknown> | undefined)?.login as string | undefined) || 'github'
-    const issue = (payload.issue ?? payload.pull_request) as Record<string, unknown> | undefined
-    const comment = payload.comment as Record<string, unknown> | undefined
-    const deliveryId = String(req.headers['x-github-delivery'] || `${event}:${repo}:${issue?.number ?? Date.now()}:${action}`)
-
-    const title = comment
-      ? `[GitHub ${repo}#${issue?.number ?? '?'}] New comment by @${sender}`
-      : `[GitHub ${repo}#${issue?.number ?? '?'}] ${String(issue?.title || `${event} (${action})`)}`
-    const content = comment
-      ? String(comment.body || '')
-      : String(issue?.body || payload.head_commit?.['message' as never] || JSON.stringify(payload).slice(0, 2000))
-    const externalUrl =
-      typeof comment?.html_url === 'string'
-        ? comment.html_url
-        : typeof issue?.html_url === 'string'
-          ? issue.html_url
-          : undefined
-
-    const labels = Array.isArray(issue?.labels)
-      ? issue!.labels.map((l) => (typeof l === 'object' && l && 'name' in l ? String((l as { name: unknown }).name) : String(l)))
-      : []
-
-    return [
-      {
-        id: randomUUID(),
-        source: 'github',
-        externalKey: deliveryId,
-        externalUrl,
-        authorName: sender,
-        title,
-        content: content || title,
-        attachments: [],
-        rawMeta: { event, action, repository: repo, labels },
-        replyTarget: issue?.url ? { issueUrl: String(issue.url) } : undefined
-      }
-    ]
+function describePlugin(p: SourcePlugin<unknown>): string {
+  switch (p.id) {
+    case 'github-webhook':
+      return 'Receives GitHub Issues/PRs via HMAC webhooks or REST API polling and posts outbound comment replies'
+    case 'email-imap-smtp':
+      return 'Polls IMAP mailboxes (with attachments) and sends threaded SMTP replies'
+    case 'generic-webhook':
+      return 'Generic JSON / plain-text webhook ingestion plugin'
+    default:
+      return p.name
   }
 }
 
@@ -146,10 +107,13 @@ export class PluginManager {
 
   constructor(
     private readonly database: CoreDatabase,
-    private readonly secrets: SecretProvider
+    private readonly secrets: SecretProvider,
+    private readonly blobs?: BlobService,
+    private readonly redactor?: Redactor
   ) {
     this.register(genericWebhookPlugin)
-    this.register(githubWebhookPlugin)
+    this.register(githubPlugin)
+    this.register(emailPlugin)
   }
 
   register<TConfig>(plugin: SourcePlugin<TConfig>): void {
@@ -160,9 +124,7 @@ export class PluginManager {
     return [...this.plugins.values()].map((p) => ({
       id: p.id,
       name: p.name,
-      description: p.id === 'github-webhook'
-        ? '接收 GitHub Issues / Pull Requests / Comments 事件，支持 HMAC-SHA256 验签'
-        : '通用 JSON/文本 Webhook 归一化接入插件',
+      description: describePlugin(p),
       supportsPull: Boolean(p.pull),
       supportsWebhook: Boolean(p.parseWebhook),
       supportsReply: Boolean(p.reply)
@@ -173,15 +135,23 @@ export class PluginManager {
     const rows = this.database.db
       .prepare('SELECT * FROM plugin_instances ORDER BY created_at DESC')
       .all() as unknown as PluginInstanceRow[]
-    return rows.map(mapInstance)
+    return rows.map((row) => mapInstance(row, true))
   }
 
   getInstance(id: string): PluginInstance {
+    return mapInstance(this.getInstanceRow(id), true)
+  }
+
+  private getInstanceRow(id: string): PluginInstanceRow {
     const row = this.database.db
       .prepare('SELECT * FROM plugin_instances WHERE id = ?')
       .get(id) as unknown as PluginInstanceRow | undefined
     if (!row) throw Errors.notFound(`Plugin instance not found: ${id}`)
-    return mapInstance(row)
+    return row
+  }
+
+  private getInstanceRaw(id: string): PluginInstance {
+    return mapInstance(this.getInstanceRow(id), false)
   }
 
   configureInstance(input: {
@@ -194,12 +164,26 @@ export class PluginManager {
     const plugin = this.plugins.get(input.pluginId)
     if (!plugin) throw Errors.notFound(`Unknown pluginId: ${input.pluginId}`)
 
-    const parsedConfig = plugin.configSchema.parse(input.config ?? {}) as Record<string, unknown>
     const now = Date.now()
     const id = input.id?.trim() || randomUUID()
     const existing = this.database.db
-      .prepare('SELECT id FROM plugin_instances WHERE id = ?')
-      .get(id) as { id: string } | undefined
+      .prepare('SELECT id, config_json FROM plugin_instances WHERE id = ?')
+      .get(id) as { id: string; config_json: string } | undefined
+
+    const mergedRawConfig: Record<string, unknown> = { ...(input.config ?? {}) }
+    if (existing) {
+      const prevConfig = JSON.parse(existing.config_json || '{}') as Record<string, unknown>
+      for (const key of SECRET_CONFIG_KEYS) {
+        const incoming = mergedRawConfig[key]
+        if (incoming === undefined || incoming === '' || incoming === MASKED_SECRET) {
+          if (typeof prevConfig[key] === 'string' && prevConfig[key]) {
+            mergedRawConfig[key] = prevConfig[key]
+          }
+        }
+      }
+    }
+
+    const parsedConfig = plugin.configSchema.parse(mergedRawConfig) as Record<string, unknown>
 
     if (existing) {
       this.database.db
@@ -218,11 +202,23 @@ export class PluginManager {
     return this.getInstance(id)
   }
 
+  deleteInstance(id: string): void {
+    const info = this.database.db.prepare('DELETE FROM plugin_instances WHERE id = ?').run(id)
+    if (info.changes === 0) throw Errors.notFound(`Plugin instance not found: ${id}`)
+  }
+
   private createContext<TConfig>(instanceId: string, config: TConfig): PluginContext<TConfig> {
     return {
       instanceId,
       config,
-      resolveSecret: (ref) => this.secrets.resolve(ref),
+      resolveSecret: async (ref) => {
+        const resolved = await this.secrets.resolve(ref)
+        if (resolved) this.redactor?.registerSecret(resolved)
+        return resolved
+      },
+      storeAttachment: this.blobs
+        ? async (input) => this.blobs!.storeBuffer(input)
+        : undefined,
       log: (level, message) => {
         console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](`[plugin:${instanceId}] ${message}`)
       }
@@ -240,7 +236,7 @@ export class PluginManager {
     }
     let config: Record<string, unknown> = {}
     if (instanceId !== 'default') {
-      const inst = this.getInstance(instanceId)
+      const inst = this.getInstanceRaw(instanceId)
       if (inst.pluginId !== pluginId) throw Errors.invalidParams(`Instance ${instanceId} is not a ${pluginId} instance`)
       if (!inst.enabled) throw Errors.forbidden(`Plugin instance ${inst.name} is disabled`)
       config = inst.config
@@ -249,7 +245,8 @@ export class PluginManager {
   }
 
   async pullInstance(instanceId: string): Promise<InboundEnvelope[]> {
-    const inst = this.getInstance(instanceId)
+    const inst = this.getInstanceRaw(instanceId)
+    if (!inst.enabled) throw Errors.forbidden(`Plugin instance ${inst.name} is disabled`)
     const plugin = this.plugins.get(inst.pluginId)
     if (!plugin || !plugin.pull) {
       return []
@@ -260,5 +257,38 @@ export class PluginManager {
       .prepare('UPDATE plugin_instances SET cursor = ?, last_sync_at = ?, updated_at = ? WHERE id = ?')
       .run(res.nextCursor ?? inst.cursor, now, now, inst.id)
     return res.envelopes
+  }
+
+  canAutoReply(instanceId: string): boolean {
+    if (!instanceId || instanceId === 'default' || instanceId === 'manual') return false
+    const row = this.database.db
+      .prepare('SELECT * FROM plugin_instances WHERE id = ?')
+      .get(instanceId) as unknown as PluginInstanceRow | undefined
+    if (!row || !row.enabled) return false
+    const plugin = this.plugins.get(row.plugin_id)
+    if (!plugin?.reply) return false
+    const cfg = JSON.parse(row.config_json || '{}') as Record<string, unknown>
+    if (cfg.autoReplyOnResolve === false) return false
+    if (row.plugin_id === 'email-imap-smtp') {
+      return typeof cfg.smtpHost === 'string' && cfg.smtpHost.trim().length > 0
+    }
+    if (row.plugin_id === 'github-webhook') {
+      return typeof cfg.token === 'string' && cfg.token.trim().length > 0
+    }
+    return true
+  }
+
+  async replyInstance(
+    instanceId: string,
+    target: Record<string, unknown>,
+    payload: { text: string; attachments?: FileRef[] }
+  ): Promise<void> {
+    const inst = this.getInstanceRaw(instanceId)
+    if (!inst.enabled) throw Errors.forbidden(`Plugin instance ${inst.name} is disabled`)
+    const plugin = this.plugins.get(inst.pluginId)
+    if (!plugin || !plugin.reply) {
+      throw Errors.invalidParams(`Plugin ${inst.pluginId} does not support outbound replies`)
+    }
+    await plugin.reply(this.createContext(inst.id, inst.config), target, payload)
   }
 }

@@ -11,6 +11,7 @@ import type { InboundEnvelope } from '@myagents/plugin-sdk'
 import type { CollabEngine } from '../collab/collab-engine'
 import { Errors } from '../errors'
 import type { AgentService } from '../runtime/agent-service'
+import type { BlobService } from '../storage/blob-service'
 import type { CoreDatabase } from '../storage/database'
 import type { PluginManager } from './plugin-manager'
 
@@ -129,7 +130,8 @@ export class InboxService {
     private readonly collab: CollabEngine,
     private readonly agents: AgentService,
     private readonly plugins: PluginManager,
-    private readonly onUpdated?: (item: InboxItem | { deletedId?: string }) => void
+    private readonly onUpdated?: (item: InboxItem | { deletedId?: string }) => void,
+    private readonly blobs?: BlobService
   ) {}
 
   listWebhooks(): WebhookConfig[] {
@@ -251,7 +253,9 @@ export class InboxService {
     authorName?: string
     source?: string
     externalUrl?: string
+    attachmentFileIds?: string[]
   }): Promise<InboxItem> {
+    const attachments = this.blobs ? this.blobs.resolveRefs(input.attachmentFileIds ?? []) : []
     const envelope: InboundEnvelope = {
       id: randomUUID(),
       source: input.source?.trim() || 'manual',
@@ -260,7 +264,7 @@ export class InboxService {
       authorName: input.authorName?.trim() || 'admin',
       title: input.title.trim(),
       content: input.content.trim(),
-      attachments: [],
+      attachments,
       rawMeta: { manual: true }
     }
     return await this.ingestEnvelope(envelope, 'manual')
@@ -338,6 +342,14 @@ export class InboxService {
         now,
         now
       )
+
+    if (this.blobs && (envelope.attachments?.length ?? 0) > 0) {
+      this.blobs.attachRefs(
+        envelope.attachments.map((a) => a.fileId),
+        'inbox',
+        id
+      )
+    }
 
     let item = this.getItem(id)
     const matched = this.matchRule(item)
@@ -489,13 +501,101 @@ export class InboxService {
     return updated
   }
 
-  setStatus(itemId: string, status: InboxStatus): InboxItem {
+  deleteItem(itemId: string): void {
+    this.getItem(itemId)
+    this.blobs?.releaseOwnerRefs('inbox', [itemId])
+    this.database.db.prepare('DELETE FROM inbox_items WHERE id = ?').run(itemId)
+    this.onUpdated?.({ deletedId: itemId })
+  }
+
+  private extractResolutionSummary(item: InboxItem): string {
+    if (item.assignedRoomId) {
+      const msg = this.database.db
+        .prepare(
+          `SELECT content FROM room_messages
+           WHERE room_id = ? AND author_kind = 'agent' AND kind IN ('summary', 'result', 'chat')
+           ORDER BY seq DESC LIMIT 1`
+        )
+        .get(item.assignedRoomId) as { content: string } | undefined
+      if (msg?.content?.trim()) return msg.content.trim().slice(0, 4_000)
+    }
+    if (item.assignedRootNodeId) {
+      const node = this.database.db
+        .prepare('SELECT result_text FROM work_nodes WHERE id = ?')
+        .get(item.assignedRootNodeId) as { result_text: string | null } | undefined
+      if (node?.result_text?.trim()) return node.result_text.trim().slice(0, 4_000)
+    }
+    return `Resolved: ${item.title}`
+  }
+
+  private recordReplyMeta(itemId: string, rawMeta: Record<string, unknown>, replyMeta: Record<string, unknown>): InboxItem {
+    const nextMeta = { ...rawMeta, _reply: replyMeta }
+    this.database.db
+      .prepare('UPDATE inbox_items SET raw_meta_json = ?, updated_at = ? WHERE id = ?')
+      .run(JSON.stringify(nextMeta), Date.now(), itemId)
+    const updated = this.getItem(itemId)
+    this.onUpdated?.(updated)
+    return updated
+  }
+
+  async replyToItem(itemId: string, explicitText?: string): Promise<InboxItem> {
+    const item = this.getItem(itemId)
+    if (!item.replyTarget) {
+      throw Errors.invalidParams('Inbox item does not have a reply target')
+    }
+    if (!item.sourceInstanceId || item.sourceInstanceId === 'default' || item.sourceInstanceId === 'manual') {
+      throw Errors.invalidParams('Inbox item is not linked to a reply-capable plugin instance')
+    }
+
+    const body = explicitText?.trim() ? explicitText.trim() : this.extractResolutionSummary(item)
+    try {
+      await this.plugins.replyInstance(item.sourceInstanceId, item.replyTarget, { text: body })
+      return this.recordReplyMeta(item.id, item.rawMeta, {
+        status: 'sent',
+        sentAt: Date.now(),
+        preview: body.slice(0, 200)
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      this.recordReplyMeta(item.id, item.rawMeta, {
+        status: 'failed',
+        attemptedAt: Date.now(),
+        error: msg.slice(0, 500)
+      })
+      throw err
+    }
+  }
+
+  private async tryAutoReply(item: InboxItem, explicitText?: string): Promise<InboxItem> {
+    if (!item.replyTarget || !item.sourceInstanceId) return item
+    try {
+      return await this.replyToItem(item.id, explicitText)
+    } catch (err) {
+      console.error('[inbox] outbound reply failed:', err)
+      return this.getItem(item.id)
+    }
+  }
+
+  async setStatus(
+    itemId: string,
+    status: InboxStatus,
+    opts?: { sendReply?: boolean; replyText?: string }
+  ): Promise<InboxItem> {
     this.getItem(itemId)
     this.database.db
       .prepare('UPDATE inbox_items SET status = ?, updated_at = ? WHERE id = ?')
       .run(status, Date.now(), itemId)
-    const updated = this.getItem(itemId)
+    let updated = this.getItem(itemId)
     this.onUpdated?.(updated)
+
+    if (
+      status === 'resolved' &&
+      opts?.sendReply !== false &&
+      updated.replyTarget &&
+      (Boolean(opts?.replyText?.trim()) || this.plugins.canAutoReply(updated.sourceInstanceId))
+    ) {
+      updated = await this.tryAutoReply(updated, opts?.replyText)
+    }
     return updated
   }
 
@@ -509,7 +609,11 @@ export class InboxService {
       this.database.db
         .prepare("UPDATE inbox_items SET status = 'resolved', updated_at = ? WHERE id = ?")
         .run(Date.now(), row.id)
-      this.onUpdated?.(this.getItem(row.id))
+      const resolved = this.getItem(row.id)
+      this.onUpdated?.(resolved)
+      if (resolved.replyTarget && this.plugins.canAutoReply(resolved.sourceInstanceId)) {
+        void this.tryAutoReply(resolved)
+      }
     }
   }
 }
