@@ -26,12 +26,11 @@ export type OpenChannelState = {
   lastDispatchedMemberIds: string[]
 }
 
-export const RESUME_COMMAND_REGEX =
-  /^(?:continue|resume)(?:$|[\s.!])|^(?:继续|接着做|接着来)(?:$|[\s，。！!,.])$/i
+export const RESUME_COMMAND_REGEX = /^(?:continue|resume)(?:$|[\s.!?,])$/i
 
 /**
  * Deterministic leading @mention parser (case-insensitive, longest displayName first).
- * Supports @everyone and multiple leading @member1 @member2 mentions, including CJK text.
+ * Supports @everyone and multiple leading @member1 @member2 mentions.
  */
 export function parseLeadingMentions(
   content: string,
@@ -43,11 +42,11 @@ export function parseLeadingMentions(
     return { everyone: false, matchedMembers: [] }
   }
 
-  if (/^@everyone(?:$|[\s,，:：。.!！?？])/i.test(trimmed)) {
+  if (/^@everyone(?:$|[\s,:;.!?])/i.test(trimmed)) {
     return { everyone: true, matchedMembers: active }
   }
 
-  // Sort longest displayName first so e.g. "@Claude 主程" matches before "@Claude"
+  // Sort longest displayName first so e.g. "@Claude Lead" matches before "@Claude".
   const sorted = [...active].sort((a, b) => b.displayName.length - a.displayName.length)
   const matched: RoomMember[] = []
   const seenIds = new Set<string>()
@@ -61,7 +60,6 @@ export function parseLeadingMentions(
       if (!nameLower || !lowerAfter.startsWith(nameLower)) return false
       const nextChar = afterAt.slice(m.displayName.length, m.displayName.length + 1)
       if (!nextChar) return true
-      // ASCII word names require a non-word boundary; CJK/symbol-ending names match directly since sorted longest-first.
       return /[A-Za-z0-9_]$/.test(m.displayName) ? !/[A-Za-z0-9_]/.test(nextChar) : true
     })
     if (!hit) break
@@ -69,7 +67,7 @@ export function parseLeadingMentions(
       seenIds.add(hit.id)
       matched.push(hit)
     }
-    cursor = afterAt.slice(hit.displayName.length).replace(/^[\s,，:：;；]+/, '')
+    cursor = afterAt.slice(hit.displayName.length).replace(/^[\s,:;]+/, '')
   }
 
   return { everyone: false, matchedMembers: matched }
@@ -77,8 +75,8 @@ export function parseLeadingMentions(
 
 export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelState> = {
   id: 'open-channel',
-  label: '开放协作群',
-  description: '固定成员多 Agent 协作群：支持 @成员/@everyone 确定性路由、任务委派/移交、Worktree 并行隔离与人工干预。',
+  label: 'Open Channel',
+  description: 'Fixed-roster multi-agent collaboration group supporting @member/@everyone deterministic routing, task delegation/transfer, Git worktree isolation, and manual intervention.',
   executionModel: 'event-driven',
   configSchema: OpenChannelConfigSchema,
   allowedTools: COLLAB_TOOLS,
@@ -102,7 +100,7 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
   onHumanMessage(ctx: RoomSnapshot<OpenChannelConfig, OpenChannelState>, msg: RoomMessage): EngineAction[] {
     const active = ctx.members.filter((m) => m.removedAt === null)
     if (active.length === 0) {
-      return [{ type: 'post_system', text: '该协作群没有可用的成员。', kind: 'system_notice' }]
+      return [{ type: 'post_system', text: 'No active member available in this collaboration room.', kind: 'system_notice' }]
     }
 
     const wsMode = ctx.config.defaultWorkspaceMode ?? 'shared-rw'
@@ -147,7 +145,7 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
       }
     }
 
-    // 4. Explicit Chinese/English resume command -> resume paused root if called standalone
+    // 4. Explicit resume command -> resume paused root if called standalone
     if (RESUME_COMMAND_REGEX.test(msg.content.trim())) {
       const pausedRoot = ctx.activeNodes.find((n) => n.parentNodeId === null && n.status === 'paused')
       if (pausedRoot) {
@@ -219,14 +217,14 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
     if (action === 'pause') {
       return [
         { type: 'set_room_state', state: 'paused' },
-        { type: 'post_system', text: '协作群已由人工暂停。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Collaboration room paused by user.', kind: 'routing_notice' }
       ]
     }
     if (action === 'resume') {
       const hasRunning = ctx.activeNodes.some((n) => ['queued', 'starting', 'running', 'waiting_children'].includes(n.status))
       return [
         { type: 'set_room_state', state: hasRunning ? 'running' : 'active' },
-        { type: 'post_system', text: '协作群已恢复运行。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Collaboration room resumed.', kind: 'routing_notice' }
       ]
     }
     if (action === 'stop') {
@@ -236,7 +234,7 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
       return [
         ...(cancelIds.length > 0 ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'stopped_by_user' }] : []),
         { type: 'set_room_state', state: 'active' },
-        { type: 'post_system', text: '已停止当前协作群所有进行中的任务。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Stopped all active tasks in this collaboration room.', kind: 'routing_notice' }
       ]
     }
     return []

@@ -13,7 +13,7 @@ function getMemberDisplayLabel(
   anonymous: boolean,
   aliasById: Map<string, string>
 ): string {
-  return anonymous ? (aliasById.get(member.id) ?? '成员') : member.displayName
+  return anonymous ? (aliasById.get(member.id) ?? 'Member') : member.displayName
 }
 
 function formatMessageLine(
@@ -72,7 +72,7 @@ export function buildTurnContext(opts: {
   const activeMembers = [...room.members.filter((m) => m.removedAt === null)].sort((a, b) => a.position - b.position)
   const labelById = new Map<string, string>()
   activeMembers.forEach((m, idx) => {
-    labelById.set(m.id, anonymous ? `成员 ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? idx - 25 : ''}` : m.displayName)
+    labelById.set(m.id, anonymous ? `Member ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? idx - 25 : ''}` : m.displayName)
   })
 
   const selfLabel = getMemberDisplayLabel(member, anonymous, labelById)

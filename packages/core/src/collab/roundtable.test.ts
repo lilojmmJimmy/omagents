@@ -59,13 +59,13 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
 
             recordedCalls.push({ seat, system: sys, user: lastUser, allMessages: body.messages })
 
-            if (scenario === 'anonymous-failure-handoff' && seat === '成员 B' && failMemberB) {
+            if (scenario === 'anonymous-failure-handoff' && seat === 'Member B' && failMemberB) {
               res.writeHead(400, { 'Content-Type': 'text/plain' })
               res.end('Forced partial failure on Member B')
               return
             }
 
-            if (scenario === 'blind-and-interject' && holdRound1Peers && lastUser.includes('[第 1 轮独立发言]') && seat !== 'PeerA') {
+            if (scenario === 'blind-and-interject' && holdRound1Peers && lastUser.includes('[Round 1 Independent Position]') && seat !== 'PeerA') {
               await new Promise<void>((r) => {
                 peerBReleaseGates.push(r)
               })
@@ -82,8 +82,8 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
             }
 
             if (scenario === 'blind-and-interject') {
-              if (lastUser.includes('round_post') || lastUser.includes('[第 1 轮独立发言]')) {
-                if (lastUser.includes('[第 1 轮独立发言]')) {
+              if (lastUser.includes('round_post') || lastUser.includes('[Round 1 Independent Position]')) {
+                if (lastUser.includes('[Round 1 Independent Position]')) {
                   if (seat === 'PeerA') {
                     sendChunk({ content: 'BLIND_PEER_A_R1: prefer blue-green cutover' })
                     endStream()
@@ -94,13 +94,13 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
                   endStream()
                   return
                 }
-                if (lastUser.includes('[第 2 轮圆桌互评]')) {
+                if (lastUser.includes('[Round 2 Roundtable Peer Review]')) {
                   sendChunk({ content: `ROUND2_${seat}: aligned after seeing interjection` })
                   endStream()
                   return
                 }
               }
-              if (lastUser.includes('summary') || lastUser.includes('[圆桌主持人总结]')) {
+              if (lastUser.includes('summary') || lastUser.includes('[Roundtable Chair Summary]')) {
                 if (toolMsgs.length === 0) {
                   sendChunk({
                     tool_calls: [
@@ -127,12 +127,12 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
             }
 
             if (scenario === 'anonymous-failure-handoff') {
-              if (lastUser.includes('[第 1 轮独立发言]')) {
+              if (lastUser.includes('[Round 1 Independent Position]')) {
                 sendChunk({ content: `ANON_${seat}_R1: note regarding @PeerA module check` })
                 endStream()
                 return
               }
-              if (lastUser.includes('[第 2 轮圆桌互评]')) {
+              if (lastUser.includes('[Round 2 Roundtable Peer Review]')) {
                 if (toolMsgs.length === 0) {
                   sendChunk({
                     tool_calls: [
@@ -156,7 +156,7 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
                 endStream()
                 return
               }
-              if (lastUser.includes('[圆桌主持人总结]')) {
+              if (lastUser.includes('[Roundtable Chair Summary]')) {
                 sendChunk({ content: 'CHAIR_ANON_SUMMARY: All anonymous seats converged.' })
                 endStream()
                 return
@@ -405,7 +405,7 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
       await donePromise
 
       // Verify Round 2 included both revealed BLIND_PEER_A_R1 and the human interjection
-      const r2Calls = recordedCalls.filter((c) => c.user.includes('[第 2 轮圆桌互评]'))
+      const r2Calls = recordedCalls.filter((c) => c.user.includes('[Round 2 Roundtable Peer Review]'))
       expect(r2Calls.length).toBe(3)
       for (const c of r2Calls) {
         expect(c.system).toContain('BLIND_PEER_A_R1')
@@ -502,7 +502,7 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
       // Verify anonymous masking scrubbed real names in the room collaboration section
       for (const c of recordedCalls) {
         expect(c.system).toContain('Anonymous Roundtable')
-        expect(c.system).toContain('成员 A')
+        expect(c.system).toContain('Member A')
         const collabSection = c.system.slice(c.system.indexOf('# Collaboration Room'))
         expect(collabSection).not.toContain('Chair')
         expect(collabSection).not.toContain('PeerA')
@@ -518,11 +518,11 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
       await rpcCall(ws, 'ctrl2', 'rooms.control', { roomId: room.id, action: 'next_round' })
       await donePromise
 
-      // Verify Round 2 ran all 3 distinct seats and scrubbed '@PeerA' inside transcript to '@成员 B'
-      const r2Calls = recordedCalls.filter((c) => c.user.includes('[第 2 轮圆桌互评]'))
+      // Verify Round 2 ran all 3 distinct seats and scrubbed '@PeerA' inside transcript to '@Member B'
+      const r2Calls = recordedCalls.filter((c) => c.user.includes('[Round 2 Roundtable Peer Review]'))
       expect(new Set(r2Calls.map((c) => c.seat)).size).toBe(3)
       for (const c of r2Calls) {
-        expect(c.system).toContain('@成员 B')
+        expect(c.system).toContain('@Member B')
         expect(c.system).not.toContain('@PeerA')
       }
 

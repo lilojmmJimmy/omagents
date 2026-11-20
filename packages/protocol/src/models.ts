@@ -140,7 +140,7 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'builtin',
     label: 'Builtin Lightweight Agent',
-    description: '进程内毫秒级启动的轻量 ReAct Agent，直连 OpenAI 兼容模型服务商，支持工作区文件读写与命令执行。',
+    description: 'In-process lightweight ReAct agent connecting directly to OpenAI-compatible model providers with workspace file and command tools.',
     requiresProvider: true,
     requiresExternalCli: false,
     enabledInV1: true,
@@ -155,7 +155,7 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'claude',
     label: 'Claude Code CLI',
-    description: '托管本机已安装的 Claude Code CLI（stream-json），支持长时编码、原生会话续接与热重启接管。',
+    description: 'Managed local Claude Code CLI (stream-json) supporting long-running coding sessions, native resume, and hot-restart handoff.',
     requiresProvider: false,
     requiresExternalCli: true,
     enabledInV1: true,
@@ -170,7 +170,7 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'codex',
     label: 'Codex CLI',
-    description: '托管本机 Codex CLI（codex exec --json），支持工作区沙箱参数与 NDJSON 事件流采集。',
+    description: 'Managed local Codex CLI (codex exec --json) supporting sandbox controls, native resume, dynamic MCP, and NDJSON event streaming.',
     requiresProvider: false,
     requiresExternalCli: true,
     enabledInV1: true,
@@ -185,7 +185,7 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'acp',
     label: 'Gemini / ACP CLI',
-    description: '托管本机 Gemini CLI 或兼容 ACP/stream-json 的外部编程代理命令行。',
+    description: 'Managed local Gemini CLI or external ACP/stream-json compatible coding agent CLI.',
     requiresProvider: false,
     requiresExternalCli: true,
     enabledInV1: true,

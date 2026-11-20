@@ -59,15 +59,15 @@ function buildRoundNodes(opts: {
   const { speakers, topic, round, superstep, blind, workspaceMode } = opts
   const instruction =
     round === 1
-      ? `[第 ${round} 轮独立发言] 围绕议题发表你的独立判断与关键论据：\n\n${topic}`
-      : `[第 ${round} 轮圆桌互评] 结合上一轮已揭晓的各位成员观点与补充信息，修正或深化你的立场：\n\n${topic}`
+      ? `[Round ${round} Independent Position] Present your independent analysis and key rationale for the topic:\n\n${topic}`
+      : `[Round ${round} Roundtable Peer Review] Review the revealed positions and new context from the previous round, then refine or reaffirm your stance:\n\n${topic}`
 
   return speakers.map((member) => ({
     type: 'spawn_node',
     assigneeMemberId: member.id,
     kind: 'round_post',
     instruction,
-    expectedResult: round === 1 ? '独立观点与核心依据' : '更新后的立场（可用 verdict: hold/changed/approve/revise 标注）',
+    expectedResult: round === 1 ? 'Independent position and core rationale' : 'Updated stance (optional verdict: hold/changed/approve/revise)',
     workspaceMode,
     visibilityOnPublish: blind ? { scope: 'private', allowedMemberIds: [member.id] } : { scope: 'public' },
     superstep
@@ -79,8 +79,8 @@ function buildSummaryAction(chair: RoomMember, topic: string, superstep: number,
     type: 'spawn_node',
     assigneeMemberId: chair.id,
     kind: 'summary',
-    instruction: `[圆桌主持人总结] 请综合以上最多 ${maxRounds} 轮全部公开观点，提炼共识点、关键分歧与可执行建议。原议题：\n\n${topic}`,
-    expectedResult: '结构化圆桌结论与行动建议',
+    instruction: `[Roundtable Chair Summary] Synthesize all visible discussion rounds (up to ${maxRounds}), identify areas of consensus and disagreement, and propose actionable next steps. Original topic:\n\n${topic}`,
+    expectedResult: 'Structured roundtable conclusion and action plan',
     workspaceMode: 'read-only',
     visibilityOnPublish: { scope: 'public' },
     superstep
@@ -89,8 +89,8 @@ function buildSummaryAction(chair: RoomMember, topic: string, superstep: number,
 
 export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableState> = {
   id: 'roundtable',
-  label: '圆桌讨论室',
-  description: 'Pregel Super-step 节拍的多 Agent 盲答圆桌讨论：支持首轮盲答防从众、匿名脱敏、多轮收敛与主持人总结转交执行。',
+  label: 'Roundtable',
+  description: 'Pregel Super-step multi-agent blind roundtable supporting round-1 isolation, optional anonymity, multi-round convergence, and Chair synthesis handoff.',
   executionModel: 'superstep',
   configSchema: RoundtableConfigSchema,
   allowedTools: ['collab_publish', 'collab_history', 'collab_remember'],
@@ -130,7 +130,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
   onHumanMessage(ctx: RoomSnapshot<RoundtableConfig, RoundtableState>, msg: RoomMessage): EngineAction[] {
     const active = ctx.members.filter((m) => m.removedAt === null)
     if (active.length === 0) {
-      return [{ type: 'post_system', text: '该圆桌讨论室没有可用成员。', kind: 'system_notice' }]
+      return [{ type: 'post_system', text: 'No active member available in this roundtable room.', kind: 'system_notice' }]
     }
 
     const phase = ctx.state.phase ?? 'idle'
@@ -139,7 +139,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       return [
         {
           type: 'post_system',
-          text: '已记录人类主持人插话内容，将在下一个 Super-step 生效（当前讨论轮次保持不变）。',
+          text: 'Recorded moderator interjection; it will take effect on the next super-step without resetting the current round.',
           kind: 'routing_notice'
         }
       ]
@@ -162,7 +162,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       },
       {
         type: 'post_system',
-        text: `圆桌讨论已开启（第 1 / ${ctx.config.maxRounds ?? 2} 轮${blind ? ' · 盲答隔离' : ''}${ctx.config.anonymous ? ' · 匿名模式' : ''}），共 ${speakers.length} 名成员并行发表独立观点。`,
+        text: `Roundtable started (Round 1 / ${ctx.config.maxRounds ?? 2}${blind ? ' · blind isolation' : ''}${ctx.config.anonymous ? ' · anonymous' : ''}) with ${speakers.length} participant(s) sharing independent positions in parallel.`,
         kind: 'routing_notice'
       },
       ...buildRoundNodes({
@@ -226,7 +226,9 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       actions.push({ type: 'set_room_state', state: summaryOk ? 'done' : 'paused' })
       actions.push({
         type: 'post_system',
-        text: summaryOk ? '圆桌讨论已完成主持人总结。可点击「转交执行」派发后续实施任务，或发送新议题开启下一周期。' : '主持人总结执行失败，请重试或重新触发总结。',
+        text: summaryOk
+          ? 'Chair summary completed. Use "Handoff" to dispatch execution tasks or post a new topic to start another cycle.'
+          : 'Chair summary failed; retry the node or trigger Summarize Now again.',
         kind: 'routing_notice'
       })
       return actions
@@ -245,7 +247,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       actions.push({ type: 'set_room_state', state: 'paused' })
       actions.push({
         type: 'post_system',
-        text: `第 ${ctx.state.currentRound ?? 1} 轮出现部分席位失败或取消，已暂停等待人工处理（可在「任务」中重试失败席位，或点击「下一轮 / 立即总结」继续）。`,
+        text: `Round ${ctx.state.currentRound ?? 1} encountered partial failure or cancellation and is paused awaiting intervention (retry failed seats in Tasks, or click Next Round / Summarize Now).`,
         kind: 'system_notice'
       })
       return actions
@@ -278,8 +280,8 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       actions.push({
         type: 'post_system',
         text: allConverged
-          ? `第 ${currentRound} 轮全体立场已收敛（hold/approve），进入主持人总结阶段。`
-          : `已完成全部 ${maxRounds} 轮讨论（已揭晓本轮发言），进入主持人总结阶段。`,
+          ? `Round ${currentRound} reached consensus (hold/approve); proceeding to Chair summary.`
+          : `Completed all ${maxRounds} rounds (responses revealed); proceeding to Chair summary.`,
         kind: 'routing_notice'
       })
       actions.push(buildSummaryAction(chair, topic, nextSuperstep, maxRounds))
@@ -299,7 +301,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       actions.push({ type: 'set_room_state', state: 'paused' })
       actions.push({
         type: 'post_system',
-        text: `第 ${currentRound} / ${maxRounds} 轮观点已全部揭晓，等待人工点击「下一轮」或「立即总结」。`,
+        text: `Round ${currentRound} / ${maxRounds} positions revealed; waiting for Next Round or Summarize Now.`,
         kind: 'routing_notice'
       })
       return actions
@@ -320,7 +322,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
     })
     actions.push({
       type: 'post_system',
-      text: `第 ${currentRound} 轮观点已揭晓，自动进入第 ${nextRound} / ${maxRounds} 轮互评。`,
+      text: `Round ${currentRound} positions revealed; advancing automatically to Round ${nextRound} / ${maxRounds} peer review.`,
       kind: 'routing_notice'
     })
     actions.push(
@@ -358,7 +360,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
     if (action === 'pause') {
       return [
         { type: 'set_room_state', state: 'paused' },
-        { type: 'post_system', text: '圆桌讨论已由人工暂停。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Roundtable discussion paused by user.', kind: 'routing_notice' }
       ]
     }
 
@@ -370,7 +372,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
         ...(cancelIds.length > 0 ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'stopped_by_user' }] : []),
         { type: 'update_strategy_state', delta: { phase: 'idle', lastBarrierSuperstep: currentSuperstep } },
         { type: 'set_room_state', state: 'active' },
-        { type: 'post_system', text: '已停止当前圆桌讨论进程。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Stopped current roundtable discussion.', kind: 'routing_notice' }
       ]
     }
 
@@ -393,7 +395,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
         },
         buildSummaryAction(chair, topic, nextSuperstep, maxRounds),
         { type: 'set_room_state', state: 'running' },
-        { type: 'post_system', text: '人工触发提前总结，已由主持人汇总结论。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Early summary triggered by user; Chair is synthesizing results.', kind: 'routing_notice' }
       ]
     }
 
@@ -401,7 +403,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       if (ctx.activeNodes.some((n) => ['queued', 'starting', 'running'].includes(n.status))) {
         return [
           { type: 'set_room_state', state: 'running' },
-          { type: 'post_system', text: '圆桌讨论已恢复执行。', kind: 'routing_notice' }
+          { type: 'post_system', text: 'Roundtable execution resumed.', kind: 'routing_notice' }
         ]
       }
       const nextSuperstep = currentSuperstep + 1
@@ -426,7 +428,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
             phase: 'discussing'
           }
         },
-        { type: 'post_system', text: `人工推进进入第 ${nextRound} / ${maxRounds} 轮。`, kind: 'routing_notice' },
+        { type: 'post_system', text: `Manually advanced to Round ${nextRound} / ${maxRounds}.`, kind: 'routing_notice' },
         ...buildRoundNodes({
           speakers,
           topic,
@@ -443,7 +445,7 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       const hasRunning = ctx.activeNodes.some((n) => ['queued', 'starting', 'running', 'waiting_children'].includes(n.status))
       return [
         { type: 'set_room_state', state: hasRunning ? 'running' : 'active' },
-        { type: 'post_system', text: '圆桌讨论已恢复。', kind: 'routing_notice' }
+        { type: 'post_system', text: 'Roundtable discussion resumed.', kind: 'routing_notice' }
       ]
     }
 

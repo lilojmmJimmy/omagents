@@ -393,16 +393,16 @@ afterAll(() => {
 describe('parseLeadingMentions', () => {
   const members = [
     { id: '1', roomId: 'r', agentId: 'a1', displayName: 'Claude', roleKind: 'lead' as const, rolePrompt: '', position: 0, joinedAt: 1, removedAt: null },
-    { id: '2', roomId: 'r', agentId: 'a2', displayName: 'Claude 主程', roleKind: 'member' as const, rolePrompt: '', position: 1, joinedAt: 1, removedAt: null },
-    { id: '3', roomId: 'r', agentId: 'a3', displayName: '代码审查', roleKind: 'member' as const, rolePrompt: '', position: 2, joinedAt: 1, removedAt: null }
+    { id: '2', roomId: 'r', agentId: 'a2', displayName: 'Claude Lead', roleKind: 'member' as const, rolePrompt: '', position: 1, joinedAt: 1, removedAt: null },
+    { id: '3', roomId: 'r', agentId: 'a3', displayName: 'Reviewer!', roleKind: 'member' as const, rolePrompt: '', position: 2, joinedAt: 1, removedAt: null }
   ]
 
-  it('matches @everyone, case-insensitive longest prefix, and CJK mentions without spaces', () => {
+  it('matches @everyone, case-insensitive longest prefix, and symbol-ending display names', () => {
     const ev = parseLeadingMentions('@Everyone please check', members)
     expect(ev.everyone).toBe(true)
     expect(ev.matchedMembers).toHaveLength(3)
 
-    const longest = parseLeadingMentions('@claude 主程 @代码审查请评审一下', members)
+    const longest = parseLeadingMentions('@claude lead @Reviewer! please inspect', members)
     expect(longest.matchedMembers.map((m) => m.id)).toEqual(['2', '3'])
 
     const proseAt = parseLeadingMentions('send email to foo@Claude please', members)

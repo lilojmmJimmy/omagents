@@ -788,7 +788,7 @@ export class CollabEngine {
                 authorId: 'system',
                 authorName: 'System',
                 kind: 'routing_notice',
-                content: '已收到继续指令，恢复暂停的任务节点。',
+                content: 'Continue directive received; resuming paused task node.',
                 attachments: [],
                 replyToMsgId: msg.id,
                 workNodeId: null,
@@ -854,7 +854,7 @@ export class CollabEngine {
     }
 
     const created = await this.createRoom({
-      title: input.title?.trim() || `${source.title} · 执行`,
+      title: input.title?.trim() || `${source.title} - Execution`,
       purpose: `Handoff from ${source.id}`,
       strategyId: input.targetStrategyId,
       primaryWorkspaceId: input.workspaceId === undefined ? source.primaryWorkspaceId : input.workspaceId,
@@ -875,7 +875,7 @@ export class CollabEngine {
         authorId: 'system',
         authorName: 'System',
         kind: 'routing_notice',
-        content: `已将结论转交至新协作房间「${created.title}」(${created.strategyId}) 执行。`,
+        content: `Handed off conclusion to collaboration room "${created.title}" (${created.strategyId}).`,
         attachments: [],
         replyToMsgId: input.sourceMsgId ?? null,
         workNodeId: null,
@@ -889,7 +889,7 @@ export class CollabEngine {
     this.events.roomUpdated(this.getRoom(input.sourceRoomId))
 
     await this.sendMessage(created.id, {
-      content: `[来自「${source.title}」的转交任务]\n\n${seedContent}`,
+      content: `[Handoff Task from "${source.title}"]\n\n${seedContent}`,
       idempotencyKey: `handoff-init-${created.id}`
     })
     return this.getRoom(created.id)
@@ -1094,7 +1094,7 @@ export class CollabEngine {
               authorId: 'system',
               authorName: 'System',
               kind: 'routing_notice',
-              content: `任务节点已改派给 @${targetMember.displayName}（替代原节点 ${row.id.slice(0, 8)}）。`,
+              content: `Task node reassigned to @${targetMember.displayName} (replacing node ${row.id.slice(0, 8)}).`,
               attachments: [],
               replyToMsgId: row.request_msg_id,
               workNodeId: replacementId,
@@ -2002,7 +2002,7 @@ export class CollabEngine {
             authorId: 'system',
             authorName: 'System',
             kind: 'system_notice',
-            content: `执行失败：${payload.errorText}`,
+            content: `Execution failed: ${payload.errorText}`,
             attachments: [],
             replyToMsgId: row.request_msg_id,
             workNodeId: row.id,
@@ -2084,7 +2084,7 @@ export class CollabEngine {
                 authorId: 'system',
                 authorName: 'System',
                 kind: 'system_notice',
-                content: `子节点 @${member?.displayName || 'Agent'}（${row.id.slice(0, 8)}）在父节点终结后重试完成：${(payload.resultText || '').slice(0, 400)}`,
+                content: `Child node @${member?.displayName || 'Agent'} (${row.id.slice(0, 8)}) completed on retry after parent settled: ${(payload.resultText || '').slice(0, 400)}`,
                 attachments: [],
                 replyToMsgId: row.request_msg_id,
                 workNodeId: row.id,
@@ -2407,7 +2407,7 @@ export class CollabEngine {
                   authorId: 'system',
                   authorName: 'System',
                   kind: 'routing_notice',
-                  content: `@${callerMember.displayName} 已将当前任务移交至 @${targetMember.displayName}。`,
+                  content: `@${callerMember.displayName} transferred the current task to @${targetMember.displayName}.`,
                   attachments: [],
                   replyToMsgId: callerRow.request_msg_id,
                   workNodeId: childId,

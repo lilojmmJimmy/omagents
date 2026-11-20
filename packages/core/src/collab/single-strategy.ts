@@ -7,8 +7,8 @@ type SingleState = { turnCount: number }
 
 export const singleStrategy: CollabStrategy<SingleConfig, SingleState> = {
   id: 'single',
-  label: '1v1 单聊',
-  description: '单个 Agent 在绑定工作区中进行持久化多轮对话，支持流式输出与文件处理。',
+  label: '1v1 Direct Chat',
+  description: 'Single agent conducting persistent multi-turn conversations in a bound workspace with streaming output and file tools.',
   executionModel: 'event-driven',
   configSchema: SingleConfigSchema,
   allowedTools: [],
@@ -28,7 +28,7 @@ export const singleStrategy: CollabStrategy<SingleConfig, SingleState> = {
   onHumanMessage(ctx: RoomSnapshot<SingleConfig, SingleState>, msg: RoomMessage): EngineAction[] {
     const primary = ctx.members.find((m) => m.removedAt === null)
     if (!primary) {
-      return [{ type: 'post_system', text: '该会话没有可用的 Agent 成员。' }]
+      return [{ type: 'post_system', text: 'No active agent member available in this chat.' }]
     }
     return [
       {

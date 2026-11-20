@@ -444,7 +444,7 @@ export class InboxService {
       const chosenStrategy =
         input.strategyId?.trim() || (allActive.length > 1 ? 'open-channel' : 'single')
       const created = await this.collab.createRoom({
-        title: `[工单] ${item.title.slice(0, 60)}`,
+        title: `[Ticket] ${item.title.slice(0, 60)}`,
         purpose: `Inbox ${item.source}:${item.externalKey}`,
         strategyId: chosenStrategy,
         strategyConfig: input.strategyConfig,
@@ -464,11 +464,11 @@ export class InboxService {
       ? `${input.promptPrefix.trim()}\n\n`
       : allowWrite
         ? ''
-        : '[安全策略: 本消息来自外部收件箱事件，已启用只读/Lockdown降权防注入隔离]\n\n'
+        : '[Security Policy: This message originates from an external inbox event; read-only/lockdown isolation is enabled]\n\n'
     const seedContent = [
-      `${prefix}### 收件箱工单：${item.title}`,
-      `- 来源: \`${item.source}\` / 作者: \`${item.authorName}\``,
-      item.externalUrl ? `- 原文链接: ${item.externalUrl}` : '',
+      `${prefix}### Inbox Ticket: ${item.title}`,
+      `- Source: \`${item.source}\` / Author: \`${item.authorName}\``,
+      item.externalUrl ? `- Source URL: ${item.externalUrl}` : '',
       '',
       item.content
     ]
