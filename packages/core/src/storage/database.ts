@@ -446,6 +446,31 @@ CREATE TABLE IF NOT EXISTS approval_requests (
           .run(3, '0003_v01c_inbox_roundtable', Date.now())
       })
     }
+    if (current < 4) {
+      this.transaction(() => {
+        this.db.exec(`
+CREATE TABLE IF NOT EXISTS scheduled_jobs (
+  id           TEXT    PRIMARY KEY,
+  name         TEXT    NOT NULL UNIQUE,
+  job_type     TEXT    NOT NULL CHECK (job_type IN ('sync_source', 'backup_snapshot', 'routine_tick')),
+  cron_expr    TEXT    NOT NULL,
+  payload_json TEXT    NOT NULL DEFAULT '{}',
+  enabled      INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  next_run_at  INTEGER NOT NULL,
+  last_run_at  INTEGER,
+  last_job_id  TEXT    REFERENCES background_jobs(id) ON DELETE SET NULL,
+  last_error   TEXT,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_due ON scheduled_jobs(enabled, next_run_at ASC);
+CREATE INDEX IF NOT EXISTS idx_background_jobs_due ON background_jobs(status, run_after ASC);
+        `)
+        this.db
+          .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
+          .run(4, '0004_v02a_cron_schedules', Date.now())
+      })
+    }
   }
 
   transaction<T>(fn: () => T): T {

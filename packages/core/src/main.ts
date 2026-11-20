@@ -4,6 +4,9 @@ import { CollabEngine } from './collab/collab-engine'
 import { DaemonClient } from './daemon-client'
 import { InboxService } from './inbox/inbox-service'
 import { PluginManager } from './inbox/plugin-manager'
+import { registerBuiltInJobHandlers } from './jobs/builtin-handlers'
+import { JobSchedulerService } from './jobs/job-scheduler'
+import { McpRegistryService } from './mcp/mcp-registry'
 import { AgentService } from './runtime/agent-service'
 import { BuiltinDriver } from './runtime/builtin-driver'
 import { ClaudeCodeDriver } from './runtime/claude-driver'
@@ -11,6 +14,7 @@ import { AcpCliDriver, CodexCliDriver } from './runtime/cli-drivers'
 import { EnvCheckService } from './runtime/env-check'
 import { AgentEnvironmentIsolator } from './runtime/environment-isolator'
 import { ProviderService } from './runtime/provider-service'
+import { SkillRegistryService } from './runtime/skill-registry'
 import { AuthService } from './security/auth-service'
 import { BasicRedactor, DefaultSecretProvider, NoopApprovalGate } from './security/hooks'
 import { CoreDatabase } from './storage/database'
@@ -52,19 +56,29 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
   const providers = new ProviderService(database, secrets)
   const envCheck = new EnvCheckService()
   const agents = new AgentService(database, workspaces)
+  const mcpRegistry = new McpRegistryService(database, secrets, redactor)
+  const skillRegistry = new SkillRegistryService(database)
 
   let httpServer: CoreHttpServer | null = null
   let inbox: InboxService | null = null
 
-  const collab = new CollabEngine(database, agents, workspaces, isolator, daemon, {
-    roomUpdated: (room) => httpServer?.broadcast('room.updated', room),
-    roomDeleted: (roomId) => httpServer?.broadcast('room.deleted', { roomId }),
-    messageCreated: (msg) => httpServer?.broadcast('room.messageCreated', msg),
-    messagesRevealed: (ev) => httpServer?.broadcast('room.messagesRevealed', ev),
-    streamDelta: (delta) => httpServer?.broadcast('room.streamDelta', delta),
-    workNodeUpdated: (node) => httpServer?.broadcast('workNode.updated', node),
-    rootNodeSettled: (node) => inbox?.onRootNodeSettled(node)
-  })
+  const collab = new CollabEngine(
+    database,
+    agents,
+    workspaces,
+    isolator,
+    daemon,
+    {
+      roomUpdated: (room) => httpServer?.broadcast('room.updated', room),
+      roomDeleted: (roomId) => httpServer?.broadcast('room.deleted', { roomId }),
+      messageCreated: (msg) => httpServer?.broadcast('room.messageCreated', msg),
+      messagesRevealed: (ev) => httpServer?.broadcast('room.messagesRevealed', ev),
+      streamDelta: (delta) => httpServer?.broadcast('room.streamDelta', delta),
+      workNodeUpdated: (node) => httpServer?.broadcast('workNode.updated', node),
+      rootNodeSettled: (node) => inbox?.onRootNodeSettled(node)
+    },
+    { mcpRegistry, skillRegistry }
+  )
 
   collab.registerDriver(new BuiltinDriver(providers, workspaces, git, daemon, approvalGate, redactor))
   collab.registerDriver(new ClaudeCodeDriver(daemon))
@@ -75,11 +89,24 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
   inbox = new InboxService(database, collab, agents, plugins, (item) => {
     httpServer?.broadcast('inbox.updated', item)
   })
+  const jobs = new JobSchedulerService(database, {
+    onUpdate: (ev) => httpServer?.broadcast('jobs.updated', ev)
+  })
+  registerBuiltInJobHandlers({
+    scheduler: jobs,
+    database,
+    dbPath,
+    inbox,
+    plugins,
+    collab,
+    agents
+  })
 
   // Startup reconcile BEFORE opening write endpoints
   const live = await daemon.call('list', {})
   terminals.reconcile(live.sessions)
   await collab.reconcile(live.sessions)
+  jobs.start()
 
   const rpcRouter = new RpcRouter({
     auth,
@@ -93,6 +120,9 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
     collab,
     inbox,
     plugins,
+    mcpRegistry,
+    skillRegistry,
+    jobs,
     isNonLoopback
   })
 
@@ -143,7 +173,11 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
     providers,
     agents,
     collab,
+    mcpRegistry,
+    skillRegistry,
+    jobs,
     async stop() {
+      await jobs.stop()
       collab.abortInProcessRuns()
       await httpServer?.close()
       daemon.close()

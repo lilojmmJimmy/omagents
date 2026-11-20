@@ -2,11 +2,15 @@ import {
   AGENT_DESCRIPTORS,
   AgentCreateInput,
   AgentUpdateInput,
+  BackgroundJobEnqueueInput,
   InboxStatus,
+  McpServerSaveInput,
   ModelProviderSaveInput,
   PROTOCOL_VERSION,
   RPC_ERROR_CODES,
   RoutingRuleSaveInput,
+  ScheduledJobSaveInput,
+  SkillInstallInput,
   WorkNodeControlAction,
   type JsonRpcError,
   type JsonRpcRequest,
@@ -18,9 +22,12 @@ import type { DaemonClient } from '../daemon-client'
 import { AppError, Errors } from '../errors'
 import type { InboxService } from '../inbox/inbox-service'
 import type { PluginManager } from '../inbox/plugin-manager'
+import type { JobSchedulerService } from '../jobs/job-scheduler'
+import type { McpRegistryService } from '../mcp/mcp-registry'
 import type { AgentService } from '../runtime/agent-service'
 import type { EnvCheckService } from '../runtime/env-check'
 import type { ProviderService } from '../runtime/provider-service'
+import type { SkillRegistryService } from '../runtime/skill-registry'
 import type { AuthService } from '../security/auth-service'
 import type { GitService } from '../workspace/git-service'
 import type { TerminalService } from '../workspace/terminal-service'
@@ -38,6 +45,9 @@ export interface RpcDeps {
   collab: CollabEngine
   inbox?: InboxService
   plugins?: PluginManager
+  mcpRegistry?: McpRegistryService
+  skillRegistry?: SkillRegistryService
+  jobs?: JobSchedulerService
   isNonLoopback: boolean
 }
 
@@ -96,11 +106,17 @@ export class RpcRouter {
           features: [
             'single-chat',
             'open-channel',
+            'roundtable',
+            'unified-inbox',
             'builtin-agent',
             'claude-cli',
+            'codex-native-resume',
             'env-isolation',
             'git-worktree',
             'mcp-collab-bridge',
+            'external-mcp',
+            'skills-registry',
+            'cron-scheduler',
             'workspace-files',
             'git-diff',
             'web-terminal'
@@ -435,6 +451,79 @@ export class RpcRouter {
       case 'plugins.syncNow': {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
         return await this.deps.inbox.syncPluginInstance(z.string().min(1).parse(p.instanceId))
+      }
+
+      // External MCP Servers & Skills Registry (v0.2a T-201)
+      case 'mcpServers.list': {
+        if (!this.deps.mcpRegistry) throw Errors.notFound('MCP registry not configured')
+        return this.deps.mcpRegistry.list()
+      }
+      case 'mcpServers.save': {
+        if (!this.deps.mcpRegistry) throw Errors.notFound('MCP registry not configured')
+        return this.deps.mcpRegistry.save(McpServerSaveInput.parse(p))
+      }
+      case 'mcpServers.delete': {
+        if (!this.deps.mcpRegistry) throw Errors.notFound('MCP registry not configured')
+        this.deps.mcpRegistry.delete(z.string().min(1).parse(p.id))
+        return { ok: true }
+      }
+      case 'mcpServers.probe': {
+        if (!this.deps.mcpRegistry) throw Errors.notFound('MCP registry not configured')
+        return await this.deps.mcpRegistry.probe(z.string().min(1).parse(p.id))
+      }
+      case 'skills.list': {
+        if (!this.deps.skillRegistry) throw Errors.notFound('Skill registry not configured')
+        return this.deps.skillRegistry.list()
+      }
+      case 'skills.install': {
+        if (!this.deps.skillRegistry) throw Errors.notFound('Skill registry not configured')
+        return await this.deps.skillRegistry.install(SkillInstallInput.parse(p))
+      }
+      case 'skills.remove': {
+        if (!this.deps.skillRegistry) throw Errors.notFound('Skill registry not configured')
+        this.deps.skillRegistry.remove(z.string().min(1).parse(p.id))
+        return { ok: true }
+      }
+
+      // Background Jobs & Cron Scheduler (v0.2a T-202)
+      case 'jobs.list': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        const limit = typeof p.limit === 'number' ? p.limit : 50
+        return this.deps.jobs.listJobs(limit)
+      }
+      case 'jobs.enqueue': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        const job = this.deps.jobs.enqueueJob(BackgroundJobEnqueueInput.parse(p))
+        if (job.runAfter <= Date.now()) void this.deps.jobs.tick()
+        return job
+      }
+      case 'jobs.retry': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        const job = this.deps.jobs.retryJob(z.string().min(1).parse(p.id))
+        void this.deps.jobs.tick()
+        return job
+      }
+      case 'jobs.delete': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        this.deps.jobs.deleteJob(z.string().min(1).parse(p.id))
+        return { ok: true }
+      }
+      case 'schedules.list': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        return this.deps.jobs.listSchedules()
+      }
+      case 'schedules.save': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        return this.deps.jobs.saveSchedule(ScheduledJobSaveInput.parse(p))
+      }
+      case 'schedules.delete': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        this.deps.jobs.deleteSchedule(z.string().min(1).parse(p.id))
+        return { ok: true }
+      }
+      case 'schedules.triggerNow': {
+        if (!this.deps.jobs) throw Errors.notFound('Job scheduler not configured')
+        return this.deps.jobs.triggerScheduleNow(z.string().min(1).parse(p.id))
       }
 
       default:
