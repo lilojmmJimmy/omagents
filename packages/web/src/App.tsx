@@ -66,7 +66,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
     setError(null)
     if (mode === 'single') {
       if (!selectedAgent) {
-        setError('请先创建一个 Agent')
+        setError('Please create an Agent first')
         return
       }
       try {
@@ -80,14 +80,14 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
         await selectRoom(room.id)
         onClose()
       } catch (err) {
-        setError(err instanceof Error ? err.message : '创建失败')
+        setError(err instanceof Error ? err.message : 'Failed to create room')
       }
       return
     }
 
     const chosenAgents = agents.filter((a) => selectedIds.includes(a.id))
     if (chosenAgents.length < 2) {
-      setError(mode === 'roundtable' ? '圆桌讨论室请至少选择 2 个 Agent' : '协作群请至少选择 2 个 Agent')
+      setError(mode === 'roundtable' ? 'Please select at least 2 agents for a roundtable' : 'Please select at least 2 agents for a group channel')
       return
     }
     const leadId = chosenAgents.some((a) => a.id === leadAgentId) ? leadAgentId : chosenAgents[0]!.id
@@ -116,7 +116,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
       await selectRoom(room.id)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建失败')
+      setError(err instanceof Error ? err.message : 'Failed to create room')
     }
   }
 
@@ -124,7 +124,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-4 shadow-lg">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">新建会话</h3>
+          <h3 className="text-sm font-semibold">New Room</h3>
           <button type="button" onClick={onClose} className="text-[#777] hover:text-[#111] cursor-pointer">
             <X size={16} />
           </button>
@@ -139,7 +139,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
               mode === 'single' ? 'bg-white text-[#111] shadow-xs' : 'text-[#666]'
             }`}
           >
-            1v1 单聊
+            1v1 Direct
           </button>
           <button
             type="button"
@@ -151,7 +151,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
               mode === 'open-channel' ? 'bg-white text-[#111] shadow-xs' : 'text-[#666]'
             }`}
           >
-            开放协作群
+            Open Channel
           </button>
           <button
             type="button"
@@ -163,20 +163,20 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
               mode === 'roundtable' ? 'bg-white text-[#111] shadow-xs' : 'text-[#666]'
             }`}
           >
-            圆桌讨论室
+            Roundtable
           </button>
         </div>
 
         <div className="space-y-3 text-xs">
           {mode === 'single' ? (
             <div>
-              <label className="block text-[#555] mb-1">选择 Agent *</label>
+              <label className="block text-[#555] mb-1">Select Agent *</label>
               <select
                 value={selectedAgent?.id ?? ''}
                 onChange={(e) => setAgentId(e.target.value)}
                 className="w-full px-2.5 py-2 text-sm border border-[#dcdcdc] rounded-lg bg-white"
               >
-                {agents.length === 0 && <option value="">请先去“智能体”页创建 Agent</option>}
+                {agents.length === 0 && <option value="">Create an Agent in the Agents tab first</option>}
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} ({a.driverKind})
@@ -186,10 +186,10 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <div className="space-y-2">
-              <label className="block text-[#555]">选择固定群成员（禁止私开 Subagent）*</label>
+              <label className="block text-[#555]">Select Fixed Members (no ad-hoc subagents) *</label>
               <div className="max-h-40 overflow-y-auto border border-[#dcdcdc] rounded-lg divide-y divide-[#efefef]">
                 {agents.length === 0 ? (
-                  <div className="p-3 text-[#888]">请先去“智能体”页创建至少 2 个 Agent</div>
+                  <div className="p-3 text-[#888]">Create at least 2 Agents in the Agents tab first</div>
                 ) : (
                   agents.map((a) => {
                     const checked = selectedIds.includes(a.id)
@@ -215,11 +215,11 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                           >
                             {isLead
                               ? mode === 'roundtable'
-                                ? '主责 Chair'
-                                : '主责 Lead'
+                                ? 'Lead Chair'
+                                : 'Lead'
                               : mode === 'roundtable'
-                                ? '设为 Chair'
-                                : '设为 Lead'}
+                                ? 'Set Chair'
+                                : 'Set Lead'}
                           </button>
                         )}
                       </div>
@@ -231,7 +231,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
               {mode === 'roundtable' && (
                 <div className="p-2.5 bg-[#fafafa] border border-[#e6e6e6] rounded-lg space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[#555]">最大讨论轮数</span>
+                    <span className="text-[#555]">Max discussion rounds</span>
                     <select
                       value={maxRounds}
                       onChange={(e) => setMaxRounds(Number(e.target.value))}
@@ -239,7 +239,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                     >
                       {[1, 2, 3, 4, 5].map((n) => (
                         <option key={n} value={n}>
-                          {n} 轮
+                          {n} rounds
                         </option>
                       ))}
                     </select>
@@ -250,7 +250,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                       checked={blindFirstRound}
                       onChange={(e) => setBlindFirstRound(e.target.checked)}
                     />
-                    <span>首轮盲答隔离（Super-step Barrier 原子揭晓）</span>
+                    <span>Round 1 blind answers (Super-step Barrier atomic reveal)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-[#444]">
                     <input
@@ -258,7 +258,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                       checked={anonymous}
                       onChange={(e) => setAnonymous(e.target.checked)}
                     />
-                    <span>匿名视角互评（隐藏发言者身份为成员 A/B）</span>
+                    <span>Anonymous peer review (mask speakers as Member A/B)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-[#444]">
                     <input
@@ -266,28 +266,28 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                       checked={autoAdvance}
                       onChange={(e) => setAutoAdvance(e.target.checked)}
                     />
-                    <span>每轮屏障达成后自动推进下一轮/汇总</span>
+                    <span>Auto-advance rounds and summarize after each barrier</span>
                   </label>
                 </div>
               )}
 
               <div>
-                <label className="block text-[#555] mb-1">默认工作区模式</label>
+                <label className="block text-[#555] mb-1">Default Workspace Mode</label>
                 <select
                   value={defaultWorkspaceMode}
                   onChange={(e) => setDefaultWorkspaceMode(e.target.value as WorkspaceMode)}
                   className="w-full px-2.5 py-2 text-sm border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="shared-rw">shared-rw — 共享工作区写锁串行</option>
-                  <option value="worktree">worktree — 每任务自动分出独立 Git Worktree 并行</option>
-                  <option value="read-only">read-only — 只读分析并发</option>
+                  <option value="shared-rw">shared-rw — Shared workspace with serialized write lock</option>
+                  <option value="worktree">worktree — Isolated Git worktree per task in parallel</option>
+                  <option value="read-only">read-only — Concurrent read-only analysis</option>
                 </select>
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-[#555] mb-1">工作区</label>
+            <label className="block text-[#555] mb-1">Workspace</label>
             <select
               value={workspaceId}
               onChange={(e) => setWorkspaceId(e.target.value)}
@@ -295,32 +295,32 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
             >
               <option value="">
                 {mode === 'single'
-                  ? '使用该 Agent 的私有工作区（默认）'
+                  ? "Use this agent's private workspace (default)"
                   : mode === 'roundtable'
-                    ? '自动新建圆桌只读分析工作区（默认）'
-                    : '自动新建群共享工作区（默认）'}
+                    ? 'Auto-create read-only roundtable workspace (default)'
+                    : 'Auto-create shared channel workspace (default)'}
               </option>
               {workspaces
                 .filter((w) => w.kind === 'project')
                 .map((w) => (
                   <option key={w.id} value={w.id}>
-                    [项目] {w.name} {w.isGit ? '(Git)' : ''} — {w.rootPath}
+                    [Project] {w.name} {w.isGit ? '(Git)' : ''} — {w.rootPath}
                   </option>
                 ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-[#555] mb-1">会话标题（可选）</label>
+            <label className="block text-[#555] mb-1">Room Title (optional)</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={
                 mode === 'single'
-                  ? '留空则按首条消息自动命名'
+                  ? 'Leave blank to auto-name from first message'
                   : mode === 'roundtable'
-                    ? '例如：技术架构决策圆桌'
-                    : '例如：核心模块开发协作群'
+                    ? 'e.g. Architecture Decision Roundtable'
+                    : 'e.g. Core Module Engineering Channel'
               }
               className="w-full px-2.5 py-2 text-sm border border-[#dcdcdc] rounded-lg"
             />
@@ -330,10 +330,10 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
         {error && <div className="text-xs text-red-600">{error}</div>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
-            取消
+            Cancel
           </button>
           <button type="submit" disabled={agents.length === 0} className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg disabled:opacity-40 cursor-pointer">
-            {mode === 'single' ? '创建单聊' : mode === 'roundtable' ? '创建圆桌讨论' : '创建协作群'}
+            {mode === 'single' ? 'Create Chat' : mode === 'roundtable' ? 'Create Roundtable' : 'Create Channel'}
           </button>
         </div>
       </form>
@@ -448,7 +448,7 @@ export function App() {
   }
 
   if (!authChecked) {
-    return <div className="h-full flex items-center justify-center text-xs text-[#888]">加载中...</div>
+    return <div className="h-full flex items-center justify-center text-xs text-[#888]">Loading...</div>
   }
 
   if (!authenticated) {
@@ -459,9 +459,9 @@ export function App() {
     <div className="h-full flex flex-col">
       {defaultPasswordWarning && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-800 flex items-center justify-between">
-          <span>当前服务端监听在非本机地址且仍使用默认密码 admin/admin，建议尽快在「设置」中修改密码。</span>
+          <span>The server is bound to a non-local interface with default credentials (admin/admin). Please change the password in Settings.</span>
           <button type="button" onClick={() => setNavPage('settings')} className="underline font-medium cursor-pointer">
-            去修改
+            Change Password
           </button>
         </div>
       )}
@@ -475,14 +475,14 @@ export function App() {
           <div className="h-12 px-3.5 border-b border-[#eaeaea] flex items-center justify-between">
             <span className="font-semibold text-sm tracking-tight">MyAgents</span>
             <div className="flex items-center gap-1.5">
-              <span title={wsConnected ? '已连接 Core' : '连接断开'}>
+              <span title={wsConnected ? 'Connected to Core' : 'Disconnected'}>
                 {wsConnected ? <Wifi size={13} className="text-green-600" /> : <WifiOff size={13} className="text-red-500" />}
               </span>
               <button
                 type="button"
                 onClick={() => setNewChatOpen(true)}
                 className="p-1 bg-[#c2542d] text-white rounded-md hover:bg-[#ad4723] cursor-pointer"
-                title="新建会话"
+                title="New room"
               >
                 <Plus size={14} />
               </button>
@@ -492,14 +492,14 @@ export function App() {
           {/* Primary Nav */}
           <nav className="p-2 space-y-0.5 border-b border-[#eaeaea] text-xs">
             {([
-              ['chat', '会话', MessageSquare],
-              ['inbox', '收件箱', Inbox],
-              ['agents', '智能体', Bot],
+              ['chat', 'Chats', MessageSquare],
+              ['inbox', 'Inbox', Inbox],
+              ['agents', 'Agents', Bot],
               ['extensions', 'Extensions', Puzzle],
               ['jobs', 'Jobs & Cron', Clock],
               ['analytics', 'Usage & Cost', BarChart3],
-              ['workspaces', '工作区', Folder],
-              ['settings', '设置', Settings]
+              ['workspaces', 'Workspaces', Folder],
+              ['settings', 'Settings', Settings]
             ] as const).map(([key, label, Icon]) => (
               <button
                 key={key}
@@ -524,9 +524,9 @@ export function App() {
 
           {/* Rooms list */}
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            <div className="px-2 py-1 text-[11px] text-[#999]">最近会话</div>
+            <div className="px-2 py-1 text-[11px] text-[#999]">Recent Rooms</div>
             {rooms.length === 0 ? (
-              <div className="px-2 py-4 text-xs text-[#999]">暂无会话</div>
+              <div className="px-2 py-4 text-xs text-[#999]">No rooms yet</div>
             ) : (
               rooms.map((r) => (
                 <div
@@ -553,7 +553,7 @@ export function App() {
                     <span className="truncate">{r.title}</span>
                     {r.strategyId !== 'single' && (
                       <span className="text-[10px] px-1 py-0.2 rounded bg-[#eaeaea] text-[#666] shrink-0">
-                        {r.strategyId === 'roundtable' ? `圆桌·${r.members.length}` : `群·${r.members.length}`}
+                        {r.strategyId === 'roundtable' ? `Table · ${r.members.length}` : `Group · ${r.members.length}`}
                       </span>
                     )}
                   </div>
@@ -561,7 +561,7 @@ export function App() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (confirm(`删除会话「${r.title}」？`)) void deleteRoom(r.id)
+                      if (confirm(`Delete room "${r.title}"?`)) void deleteRoom(r.id)
                     }}
                     className="hidden group-hover:block text-[#888] hover:text-red-600 shrink-0"
                   >
@@ -581,12 +581,12 @@ export function App() {
                   type="button"
                   onClick={() => setDockOpen(true)}
                   className="p-1 hover:bg-[#eaeaea] rounded cursor-pointer"
-                  title="打开右侧工作台"
+                  title="Open workspace dock"
                 >
                   <PanelRight size={14} />
                 </button>
               )}
-              <button type="button" onClick={() => void logout()} className="p-1 hover:bg-[#eaeaea] rounded cursor-pointer" title="退出登录">
+              <button type="button" onClick={() => void logout()} className="p-1 hover:bg-[#eaeaea] rounded cursor-pointer" title="Sign out">
                 <LogOut size={14} />
               </button>
             </div>
@@ -597,7 +597,7 @@ export function App() {
         <div
           role="separator"
           aria-orientation="vertical"
-          title="拖动调整左侧栏宽度（双击重置）"
+          title="Drag to resize left sidebar (double-click to reset)"
           onMouseDown={(e) => startResize('aside', e)}
           onDoubleClick={() => setAsideWidth(DEFAULT_ASIDE_WIDTH)}
           className={`w-1.5 shrink-0 cursor-col-resize relative group select-none ${
@@ -625,7 +625,7 @@ export function App() {
             <div
               role="separator"
               aria-orientation="vertical"
-              title="拖动调整右侧工作台宽度（双击重置）"
+              title="Drag to resize right dock (double-click to reset)"
               onMouseDown={(e) => startResize('dock', e)}
               onDoubleClick={() => setDockWidth(DEFAULT_DOCK_WIDTH)}
               className={`w-1.5 shrink-0 cursor-col-resize relative group select-none ${

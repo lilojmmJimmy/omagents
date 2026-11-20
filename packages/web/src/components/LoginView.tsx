@@ -17,7 +17,7 @@ export function LoginView() {
       const res = await apiLogin(username, password)
       await onLoginSuccess(res.username, res.defaultPasswordWarning)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登录失败')
+      setError(err instanceof Error ? err.message : 'Sign-in failed')
     } finally {
       setBusy(false)
     }
@@ -31,12 +31,12 @@ export function LoginView() {
       >
         <div>
           <h1 className="text-lg font-semibold text-[#111]">MyAgents</h1>
-          <p className="text-xs text-[#666] mt-1">多 Agent 服务端工作台（默认账号 admin / admin）</p>
+          <p className="text-xs text-[#666] mt-1">Multi-agent server workspace (default: admin / admin)</p>
         </div>
 
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-[#555] mb-1">用户名</label>
+            <label className="block text-xs text-[#555] mb-1">Username</label>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -45,7 +45,7 @@ export function LoginView() {
             />
           </div>
           <div>
-            <label className="block text-xs text-[#555] mb-1">密码</label>
+            <label className="block text-xs text-[#555] mb-1">Password</label>
             <input
               type="password"
               value={password}
@@ -62,7 +62,7 @@ export function LoginView() {
           disabled={busy}
           className="w-full py-2 text-sm font-medium text-white bg-[#c2542d] hover:bg-[#ad4723] rounded-lg disabled:opacity-50 cursor-pointer"
         >
-          {busy ? '登录中...' : '登录'}
+          {busy ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
     </div>

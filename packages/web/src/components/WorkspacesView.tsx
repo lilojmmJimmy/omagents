@@ -23,7 +23,7 @@ export function WorkspacesView() {
       setRootPath('')
       await refreshAll()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '登记失败')
+      setError(err instanceof Error ? err.message : 'Failed to register workspace')
     } finally {
       setBusy(false)
     }
@@ -36,7 +36,7 @@ export function WorkspacesView() {
       await rpc.call('workspaces.createWorktree', { projectWorkspaceId, branchSlug: 'manual' })
       await refreshAll()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建 Worktree 失败')
+      setError(err instanceof Error ? err.message : 'Failed to create worktree')
     } finally {
       setActionBusyId(null)
     }
@@ -51,12 +51,12 @@ export function WorkspacesView() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.toLowerCase().includes('uncommitted') || msg.toLowerCase().includes('dirty')) {
-        if (confirm('该 Worktree 存在未提交改动，是否强制清理目录（保留 Git 分支）？')) {
+        if (confirm('This worktree has uncommitted changes. Force remove directory (keep Git branch)?')) {
           try {
             await rpc.call('workspaces.cleanWorktree', { workspaceId, force: true })
             await refreshAll()
           } catch (forceErr) {
-            setError(forceErr instanceof Error ? forceErr.message : '强制清理失败')
+            setError(forceErr instanceof Error ? forceErr.message : 'Force clean failed')
           }
         }
       } else {
@@ -71,26 +71,26 @@ export function WorkspacesView() {
     <div className="h-full overflow-y-auto p-6 bg-[#f8f8f8]">
       <div className="max-w-4xl mx-auto space-y-5">
         <div>
-          <h1 className="text-base font-semibold text-[#111]">工作区（Workspaces）</h1>
+          <h1 className="text-base font-semibold text-[#111]">Workspaces</h1>
           <p className="text-xs text-[#666] mt-0.5">
-            登记服务器本地目录或 Git 项目仓库；支持为并行协作派发创建独立 Git Worktree 沙箱目录。
+            Register local directories or Git repositories on the server, and create isolated Git worktree sandboxes for parallel dispatch.
           </p>
         </div>
 
         <form onSubmit={handleRegister} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
-          <div className="text-xs font-medium text-[#333]">登记本地项目目录</div>
+          <div className="text-xs font-medium text-[#333]">Register Local Project Directory</div>
           <div className="grid grid-cols-3 gap-3">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="别名（可选，默认取目录名）"
+              placeholder="Alias (optional, defaults to directory name)"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
             />
             <input
               required
               value={rootPath}
               onChange={(e) => setRootPath(e.target.value)}
-              placeholder="服务器绝对路径，例如 G:\projects\my-app"
+              placeholder="Server absolute path, e.g. G:\projects\my-app"
               className="col-span-2 px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg font-mono"
             />
           </div>
@@ -102,7 +102,7 @@ export function WorkspacesView() {
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] disabled:opacity-50 cursor-pointer"
             >
               <Plus size={13} />
-              <span>{busy ? '登记中...' : '登记项目目录'}</span>
+              <span>{busy ? 'Registering...' : 'Register Directory'}</span>
             </button>
           </div>
         </form>
@@ -133,7 +133,7 @@ export function WorkspacesView() {
                     className="flex items-center gap-1 px-2.5 py-1 text-xs border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg text-[#333] cursor-pointer disabled:opacity-50"
                   >
                     <GitFork size={12} />
-                    <span>新建 Worktree</span>
+                    <span>New Worktree</span>
                   </button>
                 )}
                 {w.kind === 'git_worktree' && (
@@ -144,7 +144,7 @@ export function WorkspacesView() {
                     className="flex items-center gap-1 px-2.5 py-1 text-xs border border-[#dcdcdc] hover:border-red-400 hover:text-red-600 rounded-lg text-[#555] cursor-pointer disabled:opacity-50"
                   >
                     <Trash2 size={12} />
-                    <span>清理 Worktree</span>
+                    <span>Clean Worktree</span>
                   </button>
                 )}
               </div>

@@ -27,13 +27,13 @@ type InboxSubTab = 'items' | 'webhooks' | 'rules'
 function statusBadge(status: InboxStatus): { label: string; cls: string } {
   switch (status) {
     case 'new':
-      return { label: '待处理', cls: 'bg-[#c2542d]/15 text-[#c2542d]' }
+      return { label: 'Pending', cls: 'bg-[#c2542d]/15 text-[#c2542d]' }
     case 'in_progress':
-      return { label: '处理中', cls: 'bg-blue-50 text-blue-700' }
+      return { label: 'In Progress', cls: 'bg-blue-50 text-blue-700' }
     case 'resolved':
-      return { label: '已解决', cls: 'bg-emerald-50 text-emerald-700' }
+      return { label: 'Resolved', cls: 'bg-emerald-50 text-emerald-700' }
     case 'ignored':
-      return { label: '已忽略', cls: 'bg-[#efefef] text-[#777]' }
+      return { label: 'Dismissed', cls: 'bg-[#efefef] text-[#777]' }
   }
 }
 
@@ -213,7 +213,7 @@ export function InboxView() {
         await selectRoom(updated.assignedRoomId)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '指派失败')
+      setError(err instanceof Error ? err.message : 'Failed to assign ticket')
     }
   }
 
@@ -223,7 +223,7 @@ export function InboxView() {
       await rpc.call('inbox.setStatus', { itemId, status })
       await refreshInbox()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '更新状态失败')
+      setError(err instanceof Error ? err.message : 'Failed to update status')
     }
   }
 
@@ -238,7 +238,7 @@ export function InboxView() {
       setCreatedHookSecret({ id: res.webhook.id, name: res.webhook.name, secret: res.secret })
       await refreshInbox()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建 Webhook 失败')
+      setError(err instanceof Error ? err.message : 'Failed to create webhook')
     }
   }
 
@@ -381,17 +381,17 @@ export function InboxView() {
           <div>
             <h1 className="text-base font-semibold text-[#111] flex items-center gap-2">
               <Inbox size={17} className="text-[#c2542d]" />
-              <span>统一收件箱（Unified Inbox & Webhooks）</span>
+              <span>Unified Inbox & Webhooks</span>
             </h1>
             <p className="text-xs text-[#666] mt-0.5">
-              接纳外部 Webhook、SourcePlugin 与手动工单，默认启用 Lockdown 只读防注入隔离并自动/手动派发到 Agent 房间。
+              Ingest external webhooks, SourcePlugins, and manual tickets with default read-only Lockdown isolation, plus automatic or manual room dispatch.
             </p>
           </div>
           <div className="flex items-center gap-1 p-1 bg-white border border-[#e5e5e5] rounded-lg text-xs">
             {([
-              ['items', `工单队列 (${inboxItems.length})`, Inbox],
-              ['webhooks', `Webhook 与插件 (${webhooks.length})`, Webhook],
-              ['rules', `自动路由规则 (${routingRules.length})`, Workflow]
+              ['items', `Tickets (${inboxItems.length})`, Inbox],
+              ['webhooks', `Webhooks & Plugins (${webhooks.length})`, Webhook],
+              ['rules', `Routing Rules (${routingRules.length})`, Workflow]
             ] as const).map(([key, label, Icon]) => (
               <button
                 key={key}
@@ -427,7 +427,7 @@ export function InboxView() {
                         : 'bg-white text-[#555] border-[#dcdcdc] hover:border-[#aaa]'
                     }`}
                   >
-                    {st === 'all' ? '全部' : statusBadge(st).label}
+                    {st === 'all' ? 'All' : statusBadge(st).label}
                   </button>
                 ))}
               </div>
@@ -437,7 +437,7 @@ export function InboxView() {
                 className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] cursor-pointer"
               >
                 <Plus size={13} />
-                <span>手动新建工单</span>
+                <span>New Ticket</span>
               </button>
             </div>
 
@@ -445,17 +445,17 @@ export function InboxView() {
               <form onSubmit={handleCreateManual} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-2">
-                    <label className="block text-xs text-[#555] mb-1">工单标题 *</label>
+                    <label className="block text-xs text-[#555] mb-1">Title *</label>
                     <input
                       required
                       value={manualTitle}
                       onChange={(e) => setManualTitle(e.target.value)}
-                      placeholder="例如：排查支付回调异常"
+                      placeholder="e.g. Investigate payment callback failure"
                       className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-[#555] mb-1">提交人</label>
+                    <label className="block text-xs text-[#555] mb-1">Author</label>
                     <input
                       value={manualAuthor}
                       onChange={(e) => setManualAuthor(e.target.value)}
@@ -464,13 +464,13 @@ export function InboxView() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-[#555] mb-1">内容详情 *</label>
+                  <label className="block text-xs text-[#555] mb-1">Details *</label>
                   <textarea
                     required
                     rows={3}
                     value={manualContent}
                     onChange={(e) => setManualContent(e.target.value)}
-                    placeholder="描述背景、日志或上下文信息..."
+                    placeholder="Describe context, logs, or reproduction details..."
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                   />
                 </div>
@@ -499,10 +499,10 @@ export function InboxView() {
                   </div>
                   <div className="flex justify-end gap-2">
                     <button type="button" onClick={() => setManualOpen(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
-                      取消
+                      Cancel
                     </button>
                     <button type="submit" disabled={manualUploading} className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
-                      入箱并匹配规则
+                      Create & Match Rules
                     </button>
                   </div>
                 </div>
@@ -511,7 +511,7 @@ export function InboxView() {
 
             {visibleItems.length === 0 ? (
               <div className="bg-white border border-[#e5e5e5] rounded-xl p-8 text-center text-xs text-[#888]">
-                暂无收件箱工单，可通过手动新建或 Webhook 接入外部事件。
+                No inbox tickets yet. Create one manually or connect an external webhook.
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -543,9 +543,9 @@ export function InboxView() {
                             <span className="text-sm font-medium text-[#111] truncate">{item.title}</span>
                           </div>
                           <div className="text-[11px] text-[#888] flex items-center gap-3 flex-wrap">
-                            <span>提交人：{item.authorName}</span>
+                            <span>Author: {item.authorName}</span>
                             <span>{new Date(item.createdAt).toLocaleString()}</span>
-                            {item.matchedRuleId && <span className="text-emerald-700">已命中自动路由规则</span>}
+                            {item.matchedRuleId && <span className="text-emerald-700">Matched auto-routing rule</span>}
                             {item.externalUrl && (
                               <a
                                 href={item.externalUrl}
@@ -553,7 +553,7 @@ export function InboxView() {
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-0.5 text-[#c2542d] hover:underline"
                               >
-                                <span>原文</span>
+                                <span>Source</span>
                                 <ExternalLink size={10} />
                               </a>
                             )}
@@ -566,7 +566,7 @@ export function InboxView() {
                               onClick={() => void selectRoom(item.assignedRoomId!)}
                               className="px-2.5 py-1 text-xs border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg text-[#111] cursor-pointer"
                             >
-                              进入房间
+                              Open Room
                             </button>
                           )}
                           <button
@@ -575,7 +575,7 @@ export function InboxView() {
                             className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#c2542d]/10 text-[#c2542d] hover:bg-[#c2542d]/15 rounded-lg cursor-pointer"
                           >
                             <Send size={11} />
-                            <span>指派处理</span>
+                            <span>Assign</span>
                           </button>
                           {item.replyTarget && item.sourceInstanceId !== 'default' && item.sourceInstanceId !== 'manual' && (
                             <button
@@ -597,7 +597,7 @@ export function InboxView() {
                               onClick={() => void handleSetStatus(item.id, 'resolved')}
                               className="px-2 py-1 text-xs border border-[#dcdcdc] hover:border-emerald-500 hover:text-emerald-700 rounded-lg cursor-pointer"
                             >
-                              解决
+                              Resolve
                             </button>
                           )}
                           {item.status !== 'ignored' && (
@@ -606,7 +606,7 @@ export function InboxView() {
                               onClick={() => void handleSetStatus(item.id, 'ignored')}
                               className="px-2 py-1 text-xs border border-[#dcdcdc] hover:text-[#333] text-[#777] rounded-lg cursor-pointer"
                             >
-                              忽略
+                              Dismiss
                             </button>
                           )}
                           <button
@@ -682,7 +682,7 @@ export function InboxView() {
                 <div className="flex items-center justify-between">
                   <div className="font-semibold text-amber-900 flex items-center gap-1.5">
                     <KeyRound size={14} />
-                    <span>Webhook「{createdHookSecret.name}」密钥仅显示一次，请妥善保存：</span>
+                    <span>Webhook "{createdHookSecret.name}" secret is shown only once. Store it securely:</span>
                   </div>
                   <button type="button" onClick={() => setCreatedHookSecret(null)} className="text-amber-800 cursor-pointer">
                     <X size={14} />
@@ -698,34 +698,34 @@ export function InboxView() {
                     className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 rounded text-amber-900 shrink-0 cursor-pointer"
                   >
                     {copiedSecret ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-                    <span>{copiedSecret ? '已复制 Secret' : '复制 Secret'}</span>
+                    <span>{copiedSecret ? 'Secret Copied' : 'Copy Secret'}</span>
                   </button>
                 </div>
               </div>
             )}
 
             <form onSubmit={handleCreateWebhook} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
-              <div className="text-xs font-medium text-[#333]">创建通用 Webhook 接入端点</div>
+              <div className="text-xs font-medium text-[#333]">Create Generic Webhook Endpoint</div>
               <div className="flex gap-2">
                 <input
                   required
                   value={hookName}
                   onChange={(e) => setHookName(e.target.value)}
-                  placeholder="例如：生产告警 / 客服表单"
+                  placeholder="e.g. Production Alerts / Support Form"
                   className="flex-1 px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                 />
                 <button
                   type="submit"
                   className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] cursor-pointer"
                 >
-                  生成 Webhook & Secret
+                  Create Webhook & Secret
                 </button>
               </div>
             </form>
 
             <div className="bg-white border border-[#e5e5e5] rounded-xl divide-y divide-[#efefef]">
               {webhooks.length === 0 ? (
-                <div className="p-6 text-center text-xs text-[#888]">尚未创建通用 Webhook</div>
+                <div className="p-6 text-center text-xs text-[#888]">No generic webhooks created yet</div>
               ) : (
                 webhooks.map((w) => (
                   <div key={w.id} className="p-3.5 flex items-center justify-between gap-3 text-xs">
@@ -739,7 +739,7 @@ export function InboxView() {
                       type="button"
                       onClick={() => void handleDeleteWebhook(w.id)}
                       className="p-1.5 text-[#888] hover:text-red-600 cursor-pointer"
-                      title="删除 Webhook"
+                      title="Delete webhook"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -986,26 +986,26 @@ export function InboxView() {
         {tab === 'rules' && (
           <div className="space-y-4">
             <form onSubmit={handleCreateRule} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3 text-xs">
-              <div className="font-medium text-[#333]">新增自动路由规则</div>
+              <div className="font-medium text-[#333]">Add Auto-Routing Rule</div>
               <div className="grid grid-cols-4 gap-2.5">
                 <input
                   required
                   value={ruleName}
                   onChange={(e) => setRuleName(e.target.value)}
-                  placeholder="规则名称 *"
+                  placeholder="Rule name *"
                   className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
                 />
                 <input
                   type="number"
                   value={rulePriority}
                   onChange={(e) => setRulePriority(Number(e.target.value))}
-                  placeholder="优先级 (越小越先)"
+                  placeholder="Priority (lower first)"
                   className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
                 />
                 <input
                   value={ruleSourceFilter}
                   onChange={(e) => setRuleSourceFilter(e.target.value)}
-                  placeholder="来源过滤（空=全部，如 github）"
+                  placeholder="Source filter (blank=all, e.g. github)"
                   className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg"
                 />
                 <select
@@ -1013,9 +1013,9 @@ export function InboxView() {
                   onChange={(e) => setRuleStrategyId(e.target.value as 'single' | 'open-channel' | 'roundtable')}
                   className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="single">1v1 单聊 (single)</option>
-                  <option value="open-channel">开放协作群 (open-channel)</option>
-                  <option value="roundtable">圆桌讨论室 (roundtable)</option>
+                  <option value="single">1v1 Direct (single)</option>
+                  <option value="open-channel">Open Channel (open-channel)</option>
+                  <option value="roundtable">Roundtable (roundtable)</option>
                 </select>
               </div>
               <div className="grid grid-cols-4 gap-2.5">
@@ -1024,15 +1024,15 @@ export function InboxView() {
                   onChange={(e) => setRuleMatchType(e.target.value as RoutingMatchType)}
                   className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="keyword">keyword（逗号分隔关键词）</option>
-                  <option value="regex">regex（正则表达式）</option>
-                  <option value="meta_equals">meta_equals（字段=值）</option>
-                  <option value="always">always（匹配全部）</option>
+                  <option value="keyword">keyword (comma-separated keywords)</option>
+                  <option value="regex">regex (regular expression)</option>
+                  <option value="meta_equals">meta_equals (key=value)</option>
+                  <option value="always">always (match all)</option>
                 </select>
                 <input
                   value={ruleMatchExpr}
                   onChange={(e) => setRuleMatchExpr(e.target.value)}
-                  placeholder={ruleMatchType === 'always' ? '留空匹配全部' : '匹配表达式（如 urgent,bug）'}
+                  placeholder={ruleMatchType === 'always' ? 'Leave blank to match all' : 'Match expression (e.g. urgent,bug)'}
                   className="col-span-2 px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg font-mono"
                 />
                 <select
@@ -1053,7 +1053,7 @@ export function InboxView() {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-[#555]">目标 Agent：</span>
+                  <span className="text-[#555]">Target Agents:</span>
                   {agents.map((a) => {
                     const checked = ruleAgentIds.includes(a.id)
                     return (
@@ -1078,11 +1078,11 @@ export function InboxView() {
                       onChange={(e) => setRuleAllowWrite(e.target.checked)}
                     />
                     <ShieldAlert size={12} />
-                    <span>允许写入工作区（不勾选则默认 Lockdown 只读防注入）</span>
+                    <span>Allow workspace writes (unchecked = default read-only Lockdown)</span>
                   </label>
                 </div>
                 <button type="submit" className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
-                  保存规则
+                  Save Rule
                 </button>
               </div>
             </form>
@@ -1090,7 +1090,7 @@ export function InboxView() {
             <div className="space-y-2">
               {routingRules.length === 0 ? (
                 <div className="bg-white border border-[#e5e5e5] rounded-xl p-6 text-center text-xs text-[#888]">
-                  暂无自动路由规则，入箱工单将等待人工指派。
+                  No auto-routing rules yet. Incoming tickets will wait for manual assignment.
                 </div>
               ) : (
                 routingRules.map((r) => (
@@ -1105,11 +1105,11 @@ export function InboxView() {
                             r.allowWrite ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'
                           }`}
                         >
-                          {r.allowWrite ? '可写工作区' : '默认 Lockdown 只读防注入'}
+                          {r.allowWrite ? 'Workspace writable' : 'Default read-only Lockdown'}
                         </span>
                       </div>
                       <div className="text-[11px] text-[#888]">
-                        目标策略：{r.action.strategyId || 'open-channel'} · 来源过滤：{r.sourceFilter || '*'}
+                        Target strategy: {r.action.strategyId || 'open-channel'} · Source filter: {r.sourceFilter || '*'}
                         {r.action.workspaceId
                           ? ` · Workspace: ${workspaces.find((w) => w.id === r.action.workspaceId)?.name || r.action.workspaceId}`
                           : ''}
@@ -1123,7 +1123,7 @@ export function InboxView() {
                           r.enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-[#dcdcdc] text-[#888]'
                         }`}
                       >
-                        {r.enabled ? '已启用' : '已停用'}
+                        {r.enabled ? 'Enabled' : 'Disabled'}
                       </button>
                       <button
                         type="button"
@@ -1146,7 +1146,7 @@ export function InboxView() {
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
           <form onSubmit={handleAssignSubmit} className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-3.5 shadow-lg text-xs">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">指派工单：{assignTarget.title}</h3>
+              <h3 className="text-sm font-semibold">Assign Ticket: {assignTarget.title}</h3>
               <button type="button" onClick={() => setAssignTarget(null)} className="text-[#777] cursor-pointer">
                 <X size={16} />
               </button>
@@ -1160,7 +1160,7 @@ export function InboxView() {
                   assignMode === 'create_room' ? 'bg-white text-[#111]' : 'text-[#666]'
                 }`}
               >
-                新建处理房间
+                New Room
               </button>
               <button
                 type="button"
@@ -1169,26 +1169,26 @@ export function InboxView() {
                   assignMode === 'append_room' ? 'bg-white text-[#111]' : 'text-[#666]'
                 }`}
               >
-                追加到已有房间
+                Append to Existing Room
               </button>
             </div>
 
             {assignMode === 'create_room' ? (
               <div className="space-y-2.5">
                 <div>
-                  <label className="block text-[#555] mb-1">协作策略</label>
+                  <label className="block text-[#555] mb-1">Collaboration Strategy</label>
                   <select
                     value={assignStrategyId}
                     onChange={(e) => setAssignStrategyId(e.target.value as 'single' | 'open-channel' | 'roundtable')}
                     className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
                   >
-                    <option value="single">1v1 单聊 (single)</option>
-                    <option value="open-channel">开放协作群 (open-channel)</option>
-                    <option value="roundtable">圆桌讨论室 (roundtable)</option>
+                    <option value="single">1v1 Direct (single)</option>
+                    <option value="open-channel">Open Channel (open-channel)</option>
+                    <option value="roundtable">Roundtable (roundtable)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[#555] mb-1">指派 Agent</label>
+                  <label className="block text-[#555] mb-1">Assign Agents</label>
                   <div className="max-h-32 overflow-y-auto border border-[#dcdcdc] rounded-lg divide-y divide-[#efefef]">
                     {agents.map((a) => {
                       const checked = assignAgentIds.includes(a.id)
@@ -1211,18 +1211,18 @@ export function InboxView() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[#555] mb-1">工作区（可选）</label>
+                  <label className="block text-[#555] mb-1">Workspace (optional)</label>
                   <select
                     value={assignWorkspaceId}
                     onChange={(e) => setAssignWorkspaceId(e.target.value)}
                     className="w-full px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
                   >
-                    <option value="">默认</option>
+                    <option value="">Default</option>
                     {workspaces
                       .filter((w) => w.kind === 'project')
                       .map((w) => (
                         <option key={w.id} value={w.id}>
-                          [项目] {w.name}
+                          [Project] {w.name}
                         </option>
                       ))}
                   </select>
@@ -1230,7 +1230,7 @@ export function InboxView() {
               </div>
             ) : (
               <div>
-                <label className="block text-[#555] mb-1">选择已有房间</label>
+                <label className="block text-[#555] mb-1">Select Existing Room</label>
                 <select
                   value={assignRoomId}
                   onChange={(e) => setAssignRoomId(e.target.value)}
@@ -1252,15 +1252,15 @@ export function InboxView() {
                 onChange={(e) => setAssignAllowWrite(e.target.checked)}
               />
               <ShieldAlert size={12} />
-              <span>允许修改工作区（不勾选则默认 Lockdown 只读防注入）</span>
+              <span>Allow workspace modifications (unchecked = default read-only Lockdown)</span>
             </label>
 
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setAssignTarget(null)} className="px-3 py-1.5 border border-[#dcdcdc] rounded-lg cursor-pointer">
-                取消
+                Cancel
               </button>
               <button type="submit" className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
-                确认指派并启动
+                Assign & Start
               </button>
             </div>
           </form>

@@ -173,9 +173,9 @@ function ThinkingCollapse({
         <span className="flex items-center gap-1.5 min-w-0">
           {open ? <ChevronDown size={13} className="shrink-0" /> : <ChevronRight size={13} className="shrink-0" />}
           <Brain size={12} className={`shrink-0 ${streaming ? 'text-[#c2542d] animate-pulse' : 'text-[#8a7968]'}`} />
-          <span className="font-medium">{streaming ? '思考中 (CoT)...' : '思考过程 (CoT)'}</span>
+          <span className="font-medium">{streaming ? 'Thinking (CoT)...' : 'Thinking Process (CoT)'}</span>
           <span className="text-[11px] text-[#998d80]">
-            · {thinking.length} 字
+            · {thinking.length} chars
             {thinkingTokens ? ` · ${formatTokens(thinkingTokens)} tok` : ''}
           </span>
         </span>
@@ -204,7 +204,7 @@ function ToolStepsCollapse({ steps }: { steps: Array<{ id: string; name: string;
       >
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <Wrench size={12} />
-        <span>工具调用 · {steps.length} 步</span>
+        <span>Tool calls · {steps.length} steps</span>
         {steps.some((s) => !s.done) && <Loader2 size={12} className="animate-spin text-[#c2542d]" />}
       </button>
       {open && (
@@ -213,7 +213,7 @@ function ToolStepsCollapse({ steps }: { steps: Array<{ id: string; name: string;
             <div key={s.id} className="p-2.5 space-y-1">
               <div className="flex items-center gap-2 font-mono text-[11px] font-medium">
                 <span className={s.isError ? 'text-red-600' : 'text-[#222]'}>{s.name}</span>
-                {!s.done && <span className="text-[#c2542d]">运行中...</span>}
+                {!s.done && <span className="text-[#c2542d]">Running...</span>}
               </div>
               {s.input !== undefined && (
                 <pre className="bg-white border border-[#ececec] rounded p-1.5 overflow-x-auto text-[11px] text-[#444]">
@@ -270,47 +270,47 @@ function TurnMetricsBar({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] text-[#888] font-mono select-text">
       {durationMs !== undefined && (
-        <span className="inline-flex items-center gap-1" title="本轮执行耗时">
+        <span className="inline-flex items-center gap-1" title="Turn execution duration">
           <Clock size={11} className="text-[#999]" />
           <span>{formatDuration(durationMs)}</span>
           {usage?.ttftMs !== undefined && (
-            <span className="text-[#aaa]" title="首字响应耗时 (TTFT)">
-              (首字 {formatDuration(usage.ttftMs)})
+            <span className="text-[#aaa]" title="Time to first token (TTFT)">
+              (TTFT {formatDuration(usage.ttftMs)})
             </span>
           )}
         </span>
       )}
 
       {tps !== undefined && tps > 0 && (
-        <span className="inline-flex items-center gap-1" title={isEstimated ? '实时估算输出速率' : '输出 Token 速率'}>
+        <span className="inline-flex items-center gap-1" title={isEstimated ? 'Live estimated output speed' : 'Output token rate'}>
           <Zap size={11} className="text-amber-600/80" />
           <span>{isEstimated ? `~${tps.toFixed(1)}` : tps.toFixed(1)} tok/s</span>
         </span>
       )}
 
       {(usage?.inputTokens !== undefined || usage?.outputTokens !== undefined || usage?.cacheReadTokens) && (
-        <span title="本轮 Token 消耗（输入 / 输出）">
+        <span title="Turn token usage (input / output)">
           {usage.inputTokens !== undefined && (
             <>
-              <span>入 {formatTokens(usage.inputTokens)}</span>
-              {usage.cacheReadTokens ? <span className="text-[#aaa]"> (+{formatTokens(usage.cacheReadTokens)} 缓存)</span> : null}
+              <span>In {formatTokens(usage.inputTokens)}</span>
+              {usage.cacheReadTokens ? <span className="text-[#aaa]"> (+{formatTokens(usage.cacheReadTokens)} cached)</span> : null}
             </>
           )}
           {usage.inputTokens !== undefined && usage.outputTokens !== undefined && <span className="mx-1 text-[#ccc]">/</span>}
           {usage.outputTokens !== undefined && (
             <>
-              <span>出 {formatTokens(usage.outputTokens)}</span>
-              {usage.thinkingTokens ? <span className="text-[#9a7b5c]"> (思考 {formatTokens(usage.thinkingTokens)})</span> : null}
+              <span>Out {formatTokens(usage.outputTokens)}</span>
+              {usage.thinkingTokens ? <span className="text-[#9a7b5c]"> (Thinking {formatTokens(usage.thinkingTokens)})</span> : null}
             </>
           )}
         </span>
       )}
 
       {usage?.contextUsedTokens !== undefined && usage.contextUsedTokens > 0 && (
-        <span className="inline-flex items-center gap-1" title="当前上下文占用">
+        <span className="inline-flex items-center gap-1" title="Current context usage">
           <Layers size={11} className="text-[#999]" />
           <span>
-            上下文 {formatTokens(usage.contextUsedTokens)}
+            Context {formatTokens(usage.contextUsedTokens)}
             {usage.contextWindow ? ` / ${formatTokens(usage.contextWindow)} (${ctxPct!.toFixed(1)}%)` : ''}
           </span>
         </span>
@@ -484,14 +484,14 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
   if (!currentRoom) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#666]">
-        <p className="text-sm">还没有打开的会话</p>
-        <p className="text-xs text-[#999] mt-1">先在左侧配置模型服务商与 Agent，然后新建单聊开始工作</p>
+        <p className="text-sm">No active room open</p>
+        <p className="text-xs text-[#999] mt-1">Configure a model provider and agent on the left, then start a new chat</p>
         <button
           type="button"
           onClick={onOpenNewChat}
           className="mt-4 px-4 py-2 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] cursor-pointer"
         >
-          新建会话
+          New Room
         </button>
       </div>
     )
@@ -589,7 +589,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                     key={mem.id}
                     type="button"
                     onClick={() => insertMention(`@${mem.displayName}`)}
-                    title={`点击插入 @${mem.displayName}（${mem.driverKind ?? 'agent'} · ${mem.roleKind}）`}
+                    title={`Click to insert @${mem.displayName} (${mem.driverKind ?? 'agent'} · ${mem.roleKind})`}
                     className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-[#f4f4f4] hover:bg-[#c2542d]/10 hover:text-[#c2542d] text-[#444] shrink-0 whitespace-nowrap cursor-pointer"
                   >
                     <span
@@ -618,13 +618,13 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                       : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                 }`}
               >
-                第 {rtState.currentRound ?? 0}/{rtConfig.maxRounds ?? 2} 轮
+                Round {rtState.currentRound ?? 0}/{rtConfig.maxRounds ?? 2}
                 {rtState.phase === 'paused_partial_failure'
-                  ? ' · 部分失败'
+                  ? ' · Partial failure'
                   : rtState.phase === 'summarizing'
-                    ? ' · 汇总中'
+                    ? ' · Summarizing'
                     : rtState.phase === 'done'
-                      ? ' · 已定论'
+                      ? ' · Concluded'
                       : ''}
               </span>
               <button
@@ -632,20 +632,20 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 disabled={rtPhaseBusyOrDone}
                 onClick={() => void controlRoom(currentRoom.id, 'next_round')}
                 className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f2f2f2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                title="进入下一轮讨论"
+                title="Advance to next discussion round"
               >
                 <FastForward size={13} />
-                <span>下一轮</span>
+                <span>Next Round</span>
               </button>
               <button
                 type="button"
                 disabled={rtPhaseBusyOrDone}
                 onClick={() => void controlRoom(currentRoom.id, 'summarize_now')}
                 className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f2f2f2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                title="立即由 Chair 汇总结论"
+                title="Request immediate Chair summary"
               >
                 <Sparkles size={13} className="text-indigo-600" />
-                <span>立即总结</span>
+                <span>Summarize Now</span>
               </button>
               <button
                 type="button"
@@ -653,7 +653,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                   const latestSummary = [...messages]
                     .reverse()
                     .find((msg) => msg.authorKind === 'agent' && (msg.kind === 'summary' || msg.kind === 'result' || msg.kind === 'chat'))
-                  setHandoffTitle(`${currentRoom.title} · 执行`)
+                  setHandoffTitle(`${currentRoom.title} - Execution`)
                   setHandoffWorkspaceId(currentRoom.primaryWorkspaceId ?? '')
                   setHandoffSeedText(latestSummary?.content ?? '')
                   setHandoffStrategy('open-channel')
@@ -661,10 +661,10 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                   setHandoffOpen(true)
                 }}
                 className="flex items-center gap-1 px-2 py-1 rounded bg-[#c2542d]/10 text-[#c2542d] hover:bg-[#c2542d]/15 cursor-pointer whitespace-nowrap shrink-0 font-medium"
-                title="将圆桌结论转交新协作房间执行"
+                title="Hand off roundtable conclusion to a new execution room"
               >
                 <ArrowRightLeft size={13} />
-                <span>转交执行</span>
+                <span>Hand Off Execution</span>
               </button>
             </>
           )}
@@ -676,19 +676,19 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                   void controlRoom(currentRoom.id, currentRoom.state === 'paused' ? 'resume' : 'pause')
                 }
                 className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f2f2f2] cursor-pointer whitespace-nowrap shrink-0"
-                title={currentRoom.state === 'paused' ? '恢复协作群调度' : '暂停协作群调度'}
+                title={currentRoom.state === 'paused' ? 'Resume channel scheduling' : 'Pause channel scheduling'}
               >
                 {currentRoom.state === 'paused' ? <Play size={13} className="text-emerald-600" /> : <Pause size={13} />}
-                <span>{currentRoom.state === 'paused' ? '恢复' : '暂停'}</span>
+                <span>{currentRoom.state === 'paused' ? 'Resume' : 'Pause'}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setDockTab('tasks')}
                 className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f2f2f2] cursor-pointer whitespace-nowrap shrink-0"
-                title="查看工作节点任务树"
+                title="Inspect task node tree"
               >
                 <ListTree size={13} className="shrink-0" />
-                <span>任务</span>
+                <span>Tasks</span>
               </button>
             </>
           )}
@@ -709,7 +709,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f2f2f2] cursor-pointer whitespace-nowrap shrink-0"
           >
             <Terminal size={13} className="shrink-0" />
-            <span>终端</span>
+            <span>Terminal</span>
           </button>
         </div>
       </div>
@@ -719,16 +719,16 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
         <div className="px-4 py-1.5 bg-[#fafafa] border-b border-[#efefef] flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] text-[#666] font-mono shrink-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
             {sessionStats.model && (
-              <span className="text-[#333] font-medium truncate max-w-[200px]" title={`模型: ${sessionStats.model}`}>
+              <span className="text-[#333] font-medium truncate max-w-[200px]" title={`Model: ${sessionStats.model}`}>
                 {sessionStats.model}
               </span>
             )}
 
             {sessionStats.contextUsed !== undefined && sessionStats.contextUsed > 0 && (
-              <span className="inline-flex items-center gap-1.5" title="当前上下文窗口占用">
+              <span className="inline-flex items-center gap-1.5" title="Current context window usage">
                 <Layers size={11} className="text-[#888] shrink-0" />
                 <span>
-                  上下文 {formatTokens(sessionStats.contextUsed)}
+                  Context {formatTokens(sessionStats.contextUsed)}
                   {sessionStats.contextWindow ? ` / ${formatTokens(sessionStats.contextWindow)}` : ''}
                   {sessionStats.contextPct !== null ? ` (${sessionStats.contextPct.toFixed(1)}%)` : ''}
                 </span>
@@ -750,7 +750,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             )}
 
             {sessionStats.speed !== undefined && sessionStats.speed > 0 && (
-              <span className="inline-flex items-center gap-1" title={sessionStats.isEstimatedSpeed ? '实时估算速率' : 'Token 输出速率'}>
+              <span className="inline-flex items-center gap-1" title={sessionStats.isEstimatedSpeed ? 'Live estimated speed' : 'Token output speed'}>
                 <Gauge size={11} className="text-amber-600/80 shrink-0" />
                 <span>
                   {sessionStats.isEstimatedSpeed ? `~${sessionStats.speed.toFixed(1)}` : sessionStats.speed.toFixed(1)} tok/s
@@ -759,15 +759,15 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             )}
 
             {sessionStats.displayDurationMs !== undefined && (
-              <span className="inline-flex items-center gap-1" title={isRunning ? '本轮已执行时长' : '最近一轮执行耗时'}>
+              <span className="inline-flex items-center gap-1" title={isRunning ? 'Current turn elapsed time' : 'Last turn duration'}>
                 <Clock size={11} className="text-[#888] shrink-0" />
                 <span>{formatDuration(sessionStats.displayDurationMs)}</span>
               </span>
             )}
 
             {(sessionStats.totalIn > 0 || sessionStats.totalOut > 0) && (
-              <span className="text-[#888]" title="本会话累计 Token 消耗">
-                累计 {formatTokens(sessionStats.totalIn)} in / {formatTokens(sessionStats.totalOut)} out
+              <span className="text-[#888]" title="Cumulative session token usage">
+                Total {formatTokens(sessionStats.totalIn)} in / {formatTokens(sessionStats.totalOut)} out
                 {formatCost(sessionStats.totalCost) ? ` · ${formatCost(sessionStats.totalCost)}` : ''}
               </span>
             )}
@@ -788,7 +788,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 type="button"
                 onClick={() => void copySessionPath(sessionFilePath)}
                 className="p-0.5 text-[#777] hover:text-[#111] rounded hover:bg-[#ececec] cursor-pointer shrink-0"
-                title="复制 JSONL 会话文件路径"
+                title="Copy JSONL session transcript path"
               >
                 {copiedPath ? <Check size={11} className="text-green-600" /> : <Copy size={11} />}
               </button>
@@ -802,7 +802,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
         <div className="max-w-[820px] mx-auto space-y-5">
           {messages.length === 0 && liveTurns.length === 0 && (
             <div className="text-center text-xs text-[#999] py-12">
-              发送第一条消息开始对话。工作区路径：<code className="font-mono">{ws?.rootPath}</code>
+              Send the first message to start talking. Workspace path: <code className="font-mono">{ws?.rootPath}</code>
             </div>
           )}
 
@@ -832,7 +832,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                   <div className="flex items-center justify-between text-xs text-amber-900">
                     <span className="inline-flex items-center gap-1.5 font-medium">
                       <InboxIcon size={12} />
-                      <span>收件箱工单</span>
+                      <span>Inbox Ticket</span>
                       <span className="font-mono text-[10px] opacity-75">#{`m${m.seq}`}</span>
                       <span className="text-[11px] opacity-85">{m.authorName}</span>
                     </span>
@@ -849,7 +849,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 <div key={m.id} className="flex flex-col items-end gap-1">
                   {repliedMsg && (
                     <div className="text-[11px] text-[#777] bg-[#f8f8f8] border border-[#e8e8e8] px-2 py-0.5 rounded max-w-[75%] truncate">
-                      回复 #{`m${repliedMsg.seq}`} {repliedMsg.authorName}: {repliedMsg.content}
+                      Reply #{`m${repliedMsg.seq}`} {repliedMsg.authorName}: {repliedMsg.content}
                     </div>
                   )}
                   <div className="max-w-[82%] bg-[#f2f2f2] text-[#111] text-sm px-3.5 py-2.5 rounded-xl whitespace-pre-wrap">
@@ -886,18 +886,18 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                     <span className="font-medium text-[#111]">{m.authorName}</span>
                     {m.kind === 'result' && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700">
-                        已交卷
+                        Submitted
                       </span>
                     )}
                     {m.kind === 'summary' && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-medium">
-                        圆桌总结
+                        Roundtable Summary
                       </span>
                     )}
                     {m.visibilityScope === 'private' && (
                       <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-700">
                         <EyeOff size={10} />
-                        <span>盲答·待揭晓</span>
+                        <span>Blind · Pending Reveal</span>
                       </span>
                     )}
                     <span>{new Date(m.createdAt).toLocaleTimeString()}</span>
@@ -907,16 +907,16 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                       type="button"
                       onClick={() => setReplyTarget(m)}
                       className="hidden group-hover:inline-flex items-center gap-1 text-[11px] text-[#777] hover:text-[#c2542d] cursor-pointer"
-                      title="回复此消息"
+                      title="Reply to this message"
                     >
                       <Reply size={11} />
-                      <span>回复</span>
+                      <span>Reply</span>
                     </button>
                   )}
                 </div>
                 {repliedMsg && (
                   <div className="text-[11px] text-[#777] border-l-2 border-[#ddd] pl-2 truncate">
-                    回复 #m{repliedMsg.seq} ({repliedMsg.authorName}): {repliedMsg.content}
+                    Reply #m{repliedMsg.seq} ({repliedMsg.authorName}): {repliedMsg.content}
                   </div>
                 )}
                 <ThinkingCollapse thinking={persistedThinking} thinkingTokens={mergedUsage?.thinkingTokens} />
@@ -939,7 +939,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 <div className="flex items-center gap-2 text-xs text-[#c2542d]">
                   <Loader2 size={12} className="animate-spin" />
                   <span className="font-medium">{liveAuthor}</span>
-                  <span>正在执行...</span>
+                  <span>Running...</span>
                 </div>
                 <ThinkingCollapse
                   thinking={turn.thinking}
@@ -961,7 +961,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
           {activeNode && liveTurns.length === 0 && (
             <div className="flex items-center gap-2 text-xs text-[#666]">
               <Loader2 size={13} className="animate-spin text-[#c2542d]" />
-              <span>节点状态：{activeNode.status}...</span>
+              <span>Node status: {activeNode.status}...</span>
               {activeNode.startedAt && (
                 <span className="font-mono text-[11px] text-[#999]">
                   ({formatDuration(Math.max(0, nowTick - activeNode.startedAt))})
@@ -974,8 +974,8 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
           {retryableNode && (
             <div className="flex items-center justify-between bg-[#fafafa] border border-[#e5e5e5] rounded-lg px-3 py-2 text-xs">
               <span className="text-[#555]">
-                最近一轮状态：<strong>{retryableNode.status}</strong>
-                {retryableNode.errorText ? `（${retryableNode.errorText}）` : ''}
+                Last turn status: <strong>{retryableNode.status}</strong>
+                {retryableNode.errorText ? ` (${retryableNode.errorText})` : ''}
               </span>
               <button
                 type="button"
@@ -983,7 +983,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 className="flex items-center gap-1 px-2.5 py-1 bg-white border border-[#d8d8d8] hover:border-[#c2542d] rounded-md text-[#111] cursor-pointer"
               >
                 <RotateCcw size={12} />
-                <span>重试</span>
+                <span>Retry</span>
               </button>
             </div>
           )}
@@ -998,7 +998,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
           {replyTarget && (
             <div className="flex items-center justify-between text-[11px] bg-[#fafafa] border border-[#e5e5e5] rounded-lg px-2.5 py-1 text-[#555]">
               <span className="truncate">
-                正在回复 <strong>#m{replyTarget.seq}</strong> (@{replyTarget.authorName}): {replyTarget.content}
+                Replying to <strong>#m{replyTarget.seq}</strong> (@{replyTarget.authorName}): {replyTarget.content}
               </span>
               <button
                 type="button"
@@ -1069,8 +1069,8 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
               }}
               placeholder={
                 isMultiAgent
-                  ? '输入指令... 可用 @成员 / @everyone 指定处理人，或回复某条消息'
-                  : '输入指令... (Enter 发送，Shift+Enter 换行)'
+                  ? 'Type a message... Use @member / @everyone to target someone, or reply to a message'
+                  : 'Type a message... (Enter to send, Shift+Enter for newline)'
               }
               rows={2}
               className="w-full resize-none text-sm focus:outline-none px-1.5 py-1"
@@ -1096,10 +1096,10 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 </button>
                 <span className="text-[11px] text-[#999]">
                   {currentRoom.state === 'paused'
-                    ? '群已暂停'
+                    ? 'Paused'
                     : activeNode
-                      ? `运行中 (${activeNode.status})`
-                      : '就绪'}
+                      ? `Running (${activeNode.status})`
+                      : 'Ready'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1110,7 +1110,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                     className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-[#f2f2f2] hover:bg-[#e5e5e5] text-[#222] rounded-lg cursor-pointer"
                   >
                     <Square size={12} />
-                    <span>中断</span>
+                    <span>Interrupt</span>
                   </button>
                 )}
                 <button
@@ -1120,7 +1120,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-[#c2542d] hover:bg-[#ad4723] text-white rounded-lg disabled:opacity-40 cursor-pointer"
                 >
                   <Send size={12} />
-                  <span>发送</span>
+                  <span>Send</span>
                 </button>
               </div>
             </div>
@@ -1165,7 +1165,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 })
                 setHandoffOpen(false)
               } catch (err) {
-                setHandoffError(err instanceof Error ? err.message : '转交失败')
+                setHandoffError(err instanceof Error ? err.message : 'Handoff failed')
               } finally {
                 setHandoffLoading(false)
               }
@@ -1173,28 +1173,28 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             className="w-full max-w-[460px] bg-white rounded-xl shadow-xl border border-[#e5e5e5] p-5 space-y-3"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#111]">转交执行</h3>
+              <h3 className="text-sm font-semibold text-[#111]">Hand Off Execution</h3>
               <button type="button" onClick={() => setHandoffOpen(false)} className="text-[#888] hover:text-[#111]">
                 <X size={16} />
               </button>
             </div>
             <p className="text-xs text-[#666]">
-              将本轮圆桌结论及共享记忆转交给新协作房间继续执行，保留原讨论记录可追溯。
+              Hand off this roundtable conclusion and shared room memory to a new collaboration room while preserving full discussion traceability.
             </p>
             <div className="space-y-2.5 text-xs">
               <div>
-                <label className="block text-[#555] mb-1">目标会话模式</label>
+                <label className="block text-[#555] mb-1">Target Room Strategy</label>
                 <select
                   value={handoffStrategy}
                   onChange={(e) => setHandoffStrategy(e.target.value as 'open-channel' | 'single')}
                   className="w-full px-2.5 py-2 text-xs border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="open-channel">开放协作群（保留全部成员，Lead 主责协同执行）</option>
-                  <option value="single">1v1 单聊（交由首名成员单独执行）</option>
+                  <option value="open-channel">Open Channel (keep all members, Lead coordinates execution)</option>
+                  <option value="single">1v1 Direct (hand off to the first member alone)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-[#555] mb-1">新房间标题</label>
+                <label className="block text-[#555] mb-1">New Room Title</label>
                 <input
                   value={handoffTitle}
                   onChange={(e) => setHandoffTitle(e.target.value)}
@@ -1202,24 +1202,24 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 />
               </div>
               <div>
-                <label className="block text-[#555] mb-1">执行工作区</label>
+                <label className="block text-[#555] mb-1">Execution Workspace</label>
                 <select
                   value={handoffWorkspaceId}
                   onChange={(e) => setHandoffWorkspaceId(e.target.value)}
                   className="w-full px-2.5 py-2 text-xs border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="">沿用当前工作区</option>
+                  <option value="">Keep current workspace</option>
                   {workspaces
                     .filter((w) => w.kind === 'project')
                     .map((w) => (
                       <option key={w.id} value={w.id}>
-                        [项目] {w.name} — {w.rootPath}
+                        [Project] {w.name} — {w.rootPath}
                       </option>
                     ))}
                 </select>
               </div>
               <div>
-                <label className="block text-[#555] mb-1">初始执行指令 / 结论摘要</label>
+                <label className="block text-[#555] mb-1">Initial Execution Directive / Conclusion Summary</label>
                 <textarea
                   rows={4}
                   value={handoffSeedText}
@@ -1235,14 +1235,14 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 onClick={() => setHandoffOpen(false)}
                 className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer"
               >
-                取消
+                Cancel
               </button>
               <button
                 type="submit"
                 disabled={handoffLoading}
                 className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg disabled:opacity-40 cursor-pointer"
               >
-                {handoffLoading ? '转交中...' : '确认转交并开启执行'}
+                {handoffLoading ? 'Handing off...' : 'Confirm Handoff & Start'}
               </button>
             </div>
           </form>

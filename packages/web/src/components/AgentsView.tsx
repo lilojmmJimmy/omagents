@@ -95,7 +95,7 @@ export function AgentsView() {
   }
 
   const archiveAgent = async (agent: Agent) => {
-    if (!confirm(`确认归档 Agent「${agent.name}」？`)) return
+    if (!confirm(`Archive Agent "${agent.name}"?`)) return
     await rpc.call('agents.archive', { id: agent.id, archived: true })
     await refreshAll()
   }
@@ -105,8 +105,8 @@ export function AgentsView() {
       <div className="max-w-4xl mx-auto space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-base font-semibold text-[#111]">智能体（Agents）</h1>
-            <p className="text-xs text-[#666] mt-0.5">支持进程内轻量 Builtin Agent 与本机 Claude Code CLI，每个 Agent 自动分配独立私有工作区。</p>
+            <h1 className="text-base font-semibold text-[#111]">Agents</h1>
+            <p className="text-xs text-[#666] mt-0.5">Supports in-process Builtin Agents and external CLIs (Claude Code, Codex, Gemini/ACP), each assigned an isolated private workspace.</p>
           </div>
           <button
             type="button"
@@ -114,7 +114,7 @@ export function AgentsView() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg hover:bg-[#ad4723] cursor-pointer"
           >
             <Plus size={14} />
-            <span>新建 Agent</span>
+            <span>New Agent</span>
           </button>
         </div>
 
@@ -122,26 +122,26 @@ export function AgentsView() {
           <form onSubmit={handleCreate} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-[#555] mb-1">名称 *</label>
+                <label className="block text-xs text-[#555] mb-1">Name *</label>
                 <input
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="例如：轻舟助手 / Claude主程"
+                  placeholder="e.g. Coding Assistant / Claude Lead"
                   className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#555] mb-1">驱动类型</label>
+                <label className="block text-xs text-[#555] mb-1">Driver Type</label>
                 <select
                   value={driverKind}
                   onChange={(e) => setDriverKind(e.target.value as DriverKind)}
                   className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="builtin">Builtin 轻量自研 Agent（OpenAI 兼容 API）</option>
-                  <option value="claude">Claude Code CLI（外部进程托管）</option>
-                  <option value="codex">Codex CLI（codex exec --json）</option>
-                  <option value="acp">Gemini / ACP CLI（stream-json）</option>
+                  <option value="builtin">Builtin Agent (OpenAI-compatible API)</option>
+                  <option value="claude">Claude Code CLI (managed external process)</option>
+                  <option value="codex">Codex CLI (codex exec --json)</option>
+                  <option value="acp">Gemini / ACP CLI (stream-json)</option>
                 </select>
               </div>
             </div>
@@ -149,13 +149,13 @@ export function AgentsView() {
             {driverKind === 'builtin' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[#555] mb-1">模型服务商 *</label>
+                  <label className="block text-xs text-[#555] mb-1">Model Provider *</label>
                   <select
                     value={providerId || providers[0]?.id || ''}
                     onChange={(e) => setProviderId(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg bg-white"
                   >
-                    {providers.length === 0 && <option value="">请先在“设置”中添加模型服务商</option>}
+                    {providers.length === 0 && <option value="">Add a model provider in Settings first</option>}
                     {providers.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.defaultModel})
@@ -164,11 +164,11 @@ export function AgentsView() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-[#555] mb-1">覆盖模型名（可选）</label>
+                  <label className="block text-xs text-[#555] mb-1">Model Override (optional)</label>
                   <input
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    placeholder="留空使用服务商默认模型"
+                    placeholder="Leave blank to use provider default"
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                   />
                 </div>
@@ -178,30 +178,30 @@ export function AgentsView() {
             {driverKind !== 'builtin' && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[#555] mb-1">模型名（可选）</label>
+                  <label className="block text-xs text-[#555] mb-1">Model Name (optional)</label>
                   <input
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     placeholder={
                       driverKind === 'claude'
-                        ? '例如 sonnet / opus，留空用本机默认'
+                        ? 'e.g. sonnet / opus, leave blank for CLI default'
                         : driverKind === 'codex'
-                          ? '例如 o4-mini，留空用本机默认'
-                          : '例如 gemini-2.5-pro，留空用本机默认'
+                          ? 'e.g. o4-mini, leave blank for CLI default'
+                          : 'e.g. gemini-2.5-pro, leave blank for CLI default'
                     }
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-[#555] mb-1">权限模式</label>
+                  <label className="block text-xs text-[#555] mb-1">Permission Mode</label>
                   <select
                     value={permissionMode}
                     onChange={(e) => setPermissionMode(e.target.value as PermissionMode)}
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg bg-white"
                   >
-                    <option value="workspace-write">工作区可写</option>
-                    <option value="read-only">只读模式（禁写）</option>
-                    <option value="full">全权执行（注意风险）</option>
+                    <option value="workspace-write">Workspace Write</option>
+                    <option value="read-only">Read-only (no writes)</option>
+                    <option value="full">Full Execution (use with caution)</option>
                   </select>
                 </div>
               </div>
@@ -209,48 +209,48 @@ export function AgentsView() {
 
             {driverKind === 'builtin' && (
               <div>
-                <label className="block text-xs text-[#555] mb-1">工作区权限</label>
+                <label className="block text-xs text-[#555] mb-1">Workspace Permissions</label>
                 <select
                   value={permissionMode}
                   onChange={(e) => setPermissionMode(e.target.value as PermissionMode)}
                   className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg bg-white"
                 >
-                  <option value="workspace-write">工作区读写 + 命令执行</option>
-                  <option value="read-only">仅只读文件/搜索</option>
+                  <option value="workspace-write">Read/write workspace + command execution</option>
+                  <option value="read-only">Read-only file access & search</option>
                 </select>
               </div>
             )}
 
             <div>
-              <label className="block text-xs text-[#555] mb-1">环境隔离级别（5 层隔离架构）</label>
+              <label className="block text-xs text-[#555] mb-1">Isolation Level (5-Layer Sandbox)</label>
               <select
                 value={isolationMode}
                 onChange={(e) => setIsolationMode(e.target.value as IsolationMode)}
                 className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg bg-white"
               >
-                <option value="standard">standard — 标准模式（共享本机配置，只按工作区权限裁剪）</option>
-                <option value="isolated-home">isolated-home — 独立配置目录 + 环境变量清洗（独立 CLAUDE_CONFIG_DIR）</option>
-                <option value="lockdown">lockdown — 极严只读锁死（禁用原生写工具/Shell，仅保留只读协作原语）</option>
+                <option value="standard">standard — Shared host config, scoped by workspace permissions</option>
+                <option value="isolated-home">isolated-home — Isolated home dir + sanitized env (dedicated CLAUDE_CONFIG_DIR)</option>
+                <option value="lockdown">lockdown — Strict read-only lockdown (native write/shell disabled, collab primitives only)</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs text-[#555] mb-1">职责简介（可选）</label>
+              <label className="block text-xs text-[#555] mb-1">Role Summary (optional)</label>
               <input
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="一句话描述擅长什么"
+                placeholder="Brief one-line summary of capabilities"
                 className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-[#555] mb-1">系统提示词（可选）</label>
+              <label className="block text-xs text-[#555] mb-1">System Prompt (optional)</label>
               <textarea
                 rows={3}
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                placeholder="设定角色、输出风格与工作规范..."
+                placeholder="Define persona, output style, and working conventions..."
                 className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
               />
             </div>
@@ -301,10 +301,10 @@ export function AgentsView() {
             {error && <div className="text-xs text-red-600">{error}</div>}
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setCreating(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
-                取消
+                Cancel
               </button>
               <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
-                保存并创建私有工作区
+                Save & Create Private Workspace
               </button>
             </div>
           </form>
@@ -313,7 +313,7 @@ export function AgentsView() {
         <div className="space-y-2.5">
           {agents.length === 0 ? (
             <div className="bg-white border border-[#e5e5e5] rounded-xl p-8 text-center text-xs text-[#888]">
-              暂无 Agent，点击右上角「新建 Agent」创建你的第一个内置或 Claude Code Agent。
+              No agents yet. Click "New Agent" in the top right to create a Builtin or external CLI agent.
             </div>
           ) : (
             agents.map((a) => (
@@ -347,7 +347,7 @@ export function AgentsView() {
                       )}
                     </div>
                     {a.bio && <p className="text-xs text-[#666]">{a.bio}</p>}
-                    <p className="text-[11px] text-[#999] font-mono truncate">私有工作区：{a.defaultWorkspacePath}</p>
+                    <p className="text-[11px] text-[#999] font-mono truncate">Private workspace: {a.defaultWorkspacePath}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
@@ -365,13 +365,13 @@ export function AgentsView() {
                       className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-[#c2542d]/10 text-[#c2542d] hover:bg-[#c2542d]/15 rounded-lg cursor-pointer"
                     >
                       <MessageSquare size={12} />
-                      <span>开聊</span>
+                      <span>Chat</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => void archiveAgent(a)}
                       className="p-1.5 text-[#888] hover:text-red-600 rounded-lg cursor-pointer"
-                      title="归档"
+                      title="Archive"
                     >
                       <Trash2 size={14} />
                     </button>

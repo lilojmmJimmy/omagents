@@ -89,21 +89,21 @@ export function SettingsView() {
       setPApiKey('')
       await refreshAll()
     } catch (err) {
-      setPError(err instanceof Error ? err.message : '保存失败')
+      setPError(err instanceof Error ? err.message : 'Failed to save')
     }
   }
 
   const probeProvider = async (id: string) => {
-    setProbeResult((s) => ({ ...s, [id]: '探测中...' }))
+    setProbeResult((s) => ({ ...s, [id]: 'Probing...' }))
     const res = await rpc.call<{ ok: boolean; latencyMs: number; models?: string[]; error?: string }>('providers.probe', { id })
     setProbeResult((s) => ({
       ...s,
-      [id]: res.ok ? `连接正常 (${res.latencyMs}ms${res.models ? `, ${res.models.length} 个模型` : ''})` : `失败: ${res.error}`
+      [id]: res.ok ? `Connected (${res.latencyMs}ms${res.models ? `, ${res.models.length} models` : ''})` : `Failed: ${res.error}`
     }))
   }
 
   const deleteProvider = async (id: string) => {
-    if (!confirm('确认删除该模型服务商？')) return
+    if (!confirm('Delete this model provider?')) return
     await rpc.call('providers.delete', { id })
     await refreshAll()
   }
@@ -115,9 +115,9 @@ export function SettingsView() {
       await apiChangePassword(oldPw, newPw)
       setOldPw('')
       setNewPw('')
-      setPwMsg('密码已更新（其他会话已登出）')
+      setPwMsg('Password updated (other sessions signed out)')
     } catch (err) {
-      setPwMsg(err instanceof Error ? err.message : '修改失败')
+      setPwMsg(err instanceof Error ? err.message : 'Failed to update password')
     }
   }
 
@@ -129,15 +129,15 @@ export function SettingsView() {
   return (
     <div className="h-full overflow-y-auto p-6 bg-[#f8f8f8]">
       <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-base font-semibold text-[#111]">设置（Settings）</h1>
+        <h1 className="text-base font-semibold text-[#111]">Settings</h1>
 
         {/* Environment check */}
         <section className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-[#111]">外部运行时环境检测</h2>
+            <h2 className="text-sm font-medium text-[#111]">External Runtime Diagnostics</h2>
             <button type="button" onClick={() => void refreshEnv()} className="flex items-center gap-1 text-xs text-[#666] hover:text-[#111] cursor-pointer">
               <RefreshCw size={12} />
-              <span>重新检测</span>
+              <span>Re-check</span>
             </button>
           </div>
           <div className="divide-y divide-[#efefef] text-xs">
@@ -146,7 +146,7 @@ export function SettingsView() {
                 <div className="flex items-center gap-2">
                   {item!.ready ? <CheckCircle2 size={14} className="text-green-600" /> : <XCircle size={14} className="text-red-500" />}
                   <span className="font-mono font-medium">{item!.kind}</span>
-                  <span className="text-[#666]">{item!.version || item!.problem || '未安装'}</span>
+                  <span className="text-[#666]">{item!.version || item!.problem || 'Not installed'}</span>
                 </div>
                 <span className="font-mono text-[11px] text-[#999] truncate max-w-sm">{item!.path || '-'}</span>
               </div>
@@ -156,48 +156,48 @@ export function SettingsView() {
 
         {/* Model Providers */}
         <section className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-4">
-          <h2 className="text-sm font-medium text-[#111]">模型服务商（供 Builtin 轻量 Agent 使用）</h2>
+          <h2 className="text-sm font-medium text-[#111]">Model Providers (for Builtin Agents)</h2>
           <form onSubmit={handleSaveProvider} className="grid grid-cols-2 gap-3 text-xs border-b border-[#efefef] pb-4">
             <input
               required
               value={pName}
               onChange={(e) => setPName(e.target.value)}
-              placeholder="服务商名称，如 DeepSeek / OpenAI / Ollama"
+              placeholder="Provider name, e.g. DeepSeek / OpenAI / Ollama"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
             />
             <input
               required
               value={pModel}
               onChange={(e) => setPModel(e.target.value)}
-              placeholder="默认模型名，如 deepseek-chat / gpt-4o-mini"
+              placeholder="Default model, e.g. deepseek-chat / gpt-4o-mini"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg font-mono"
             />
             <input
               required
               value={pBaseUrl}
               onChange={(e) => setPBaseUrl(e.target.value)}
-              placeholder="Base URL，如 https://api.deepseek.com/v1"
+              placeholder="Base URL, e.g. https://api.deepseek.com/v1"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg font-mono"
             />
             <input
               type="password"
               value={pApiKey}
               onChange={(e) => setPApiKey(e.target.value)}
-              placeholder="API Key（或 env:OPENAI_API_KEY）"
+              placeholder="API Key (or env:OPENAI_API_KEY)"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg font-mono"
             />
             {pError && <div className="col-span-2 text-red-600">{pError}</div>}
             <div className="col-span-2 flex justify-end">
               <button type="submit" className="flex items-center gap-1 px-3 py-1.5 bg-[#c2542d] text-white rounded-lg font-medium cursor-pointer">
                 <Plus size={13} />
-                <span>添加服务商</span>
+                <span>Add Provider</span>
               </button>
             </div>
           </form>
 
           <div className="space-y-2">
             {providers.length === 0 ? (
-              <div className="text-xs text-[#999] text-center py-3">尚未配置任何模型服务商</div>
+              <div className="text-xs text-[#999] text-center py-3">No model providers configured yet</div>
             ) : (
               providers.map((p) => (
                 <div key={p.id} className="border border-[#eee] rounded-lg p-3 flex items-center justify-between text-xs">
@@ -214,7 +214,7 @@ export function SettingsView() {
                       onClick={() => void probeProvider(p.id)}
                       className="px-2.5 py-1 border border-[#dcdcdc] hover:border-[#c2542d] rounded-md cursor-pointer"
                     >
-                      测试连通性
+                      Test Connection
                     </button>
                     <button type="button" onClick={() => void deleteProvider(p.id)} className="p-1 text-[#888] hover:text-red-600 cursor-pointer">
                       <Trash2 size={14} />
@@ -230,7 +230,7 @@ export function SettingsView() {
         <section className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-[#111]">
             <KeyRound size={15} />
-            <span>修改管理员密码</span>
+            <span>Change Admin Password</span>
           </div>
           <form onSubmit={handleChangePw} className="flex items-center gap-3">
             <input
@@ -238,7 +238,7 @@ export function SettingsView() {
               required
               value={oldPw}
               onChange={(e) => setOldPw(e.target.value)}
-              placeholder="当前密码"
+              placeholder="Current password"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
             />
             <input
@@ -246,11 +246,11 @@ export function SettingsView() {
               required
               value={newPw}
               onChange={(e) => setNewPw(e.target.value)}
-              placeholder="新密码（至少 4 位）"
+              placeholder="New password (at least 4 characters)"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
             />
             <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#111] text-white rounded-lg cursor-pointer">
-              修改密码
+              Update Password
             </button>
           </form>
           {pwMsg && <div className="text-xs text-[#c2542d]">{pwMsg}</div>}

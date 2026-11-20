@@ -70,8 +70,8 @@ function TerminalPane({ workspaceId }: { workspaceId: string }) {
       try {
         const msg = JSON.parse(String(ev.data)) as { type?: string; data?: string; exitCode?: number; message?: string }
         if (msg.type === 'data' && msg.data) term.write(msg.data)
-        else if (msg.type === 'exit') term.writeln(`\r\n[进程已退出，code=${msg.exitCode}]`)
-        else if (msg.type === 'error') term.writeln(`\r\n[错误: ${msg.message}]`)
+        else if (msg.type === 'exit') term.writeln(`\r\n[Process exited, code=${msg.exitCode}]`)
+        else if (msg.type === 'error') term.writeln(`\r\n[Error: ${msg.message}]`)
       } catch {
         // ignore
       }
@@ -145,7 +145,7 @@ function TerminalPane({ workspaceId }: { workspaceId: string }) {
           className="flex items-center gap-1 px-2 py-1 text-xs text-[#555] hover:bg-[#eaeaea] rounded cursor-pointer shrink-0"
         >
           <Plus size={12} />
-          <span>新建终端</span>
+          <span>New Terminal</span>
         </button>
       </div>
       {activeId ? (
@@ -153,7 +153,7 @@ function TerminalPane({ workspaceId }: { workspaceId: string }) {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-xs text-[#888] gap-2">
           <TerminalIcon size={20} />
-          <span>点击“新建终端”在工作区目录打开 Shell（重启 core 不断开）</span>
+          <span>Click "New Terminal" to open a shell in the workspace directory (persists across core restarts)</span>
         </div>
       )}
     </div>
@@ -242,7 +242,7 @@ function TasksPane() {
         <p className="text-[11px] text-[#444] line-clamp-2 whitespace-pre-wrap">{node.instruction}</p>
 
         {node.blockingReason && (
-          <div className="text-[10px] text-blue-700 font-mono">阻塞原因: {node.blockingReason}</div>
+          <div className="text-[10px] text-blue-700 font-mono">Blocked reason: {node.blockingReason}</div>
         )}
         {node.errorText && <div className="text-[10px] text-red-600 font-mono truncate">{node.errorText}</div>}
 
@@ -255,7 +255,7 @@ function TasksPane() {
                 className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-[#dcdcdc] hover:border-amber-500 rounded text-[#444] cursor-pointer"
               >
                 <Square size={10} />
-                <span>中断</span>
+                <span>Interrupt</span>
               </button>
               <button
                 type="button"
@@ -263,7 +263,7 @@ function TasksPane() {
                 className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-[#dcdcdc] hover:border-red-500 hover:text-red-600 rounded text-[#444] cursor-pointer"
               >
                 <X size={10} />
-                <span>取消</span>
+                <span>Cancel</span>
               </button>
             </>
           )}
@@ -274,7 +274,7 @@ function TasksPane() {
               className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-[#dcdcdc] hover:border-[#c2542d] rounded text-[#111] cursor-pointer"
             >
               <Play size={10} />
-              <span>继续</span>
+              <span>Resume</span>
             </button>
           )}
           {(node.status === 'failed' || node.status === 'cancelled') && (
@@ -284,7 +284,7 @@ function TasksPane() {
               className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border border-[#dcdcdc] hover:border-[#c2542d] rounded text-[#111] cursor-pointer"
             >
               <RotateCcw size={10} />
-              <span>重试</span>
+              <span>Retry</span>
             </button>
           )}
           {otherMembers.length > 0 && (
@@ -295,9 +295,9 @@ function TasksPane() {
                 if (targetMemberId) void controlNode(node.id, 'reassign', { targetMemberId })
               }}
               className="text-[11px] px-1.5 py-0.5 border border-[#dcdcdc] rounded bg-[#fafafa] text-[#555] cursor-pointer"
-              title="改派给其他成员"
+              title="Reassign to another member"
             >
-              <option value="">改派给...</option>
+              <option value="">Reassign to...</option>
               {otherMembers.map((m) => (
                 <option key={m.id} value={m.id}>
                   @{m.displayName}
@@ -319,13 +319,13 @@ function TasksPane() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="px-3 py-1.5 border-b border-[#efefef] bg-[#fafafa] flex items-center justify-between text-xs shrink-0">
-        <span className="text-[#555]">工作节点树 ({nodes.length})</span>
+        <span className="text-[#555]">Task Node Tree ({nodes.length})</span>
         {roomId && (
           <button
             type="button"
             onClick={() => void selectRoom(roomId)}
             className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer"
-            title="刷新任务状态"
+            title="Refresh task status"
           >
             <RefreshCw size={12} />
           </button>
@@ -334,7 +334,7 @@ function TasksPane() {
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {nodes.length === 0 ? (
-          <div className="text-xs text-[#999] text-center py-6">暂无执行节点</div>
+          <div className="text-xs text-[#999] text-center py-6">No execution nodes yet</div>
         ) : (
           <div className="space-y-2">{rootNodes.flatMap((r) => renderTree(r, 0))}</div>
         )}
@@ -342,10 +342,10 @@ function TasksPane() {
         <div className="pt-2 border-t border-[#efefef] space-y-1.5">
           <div className="flex items-center gap-1.5 text-xs font-medium text-[#444]">
             <Brain size={12} className="text-[#c2542d]" />
-            <span>房间共享记忆 ({memories.length})</span>
+            <span>Shared Room Memory ({memories.length})</span>
           </div>
           {memories.length === 0 ? (
-            <div className="text-[11px] text-[#999]">Agent 可通过 collab_remember 写入跨轮共享记忆</div>
+            <div className="text-[11px] text-[#999]">Agents can persist cross-turn shared memory via collab_remember</div>
           ) : (
             <ul className="space-y-1">
               {memories.map((mem) => (
@@ -386,7 +386,7 @@ export function WorkspaceDock() {
       const list = await rpc.call<FileEntry[]>('files.tree', { workspaceId, depth: 3 })
       setEntries(list)
     } catch (err) {
-      setStatusMsg(err instanceof Error ? err.message : '加载目录失败')
+      setStatusMsg(err instanceof Error ? err.message : 'Failed to load directory')
     }
   }
 
@@ -423,7 +423,7 @@ export function WorkspaceDock() {
       setDirty(false)
       setStatusMsg(null)
     } catch (err) {
-      setStatusMsg(err instanceof Error ? err.message : '读取失败')
+      setStatusMsg(err instanceof Error ? err.message : 'Failed to read file')
     }
   }
 
@@ -438,15 +438,15 @@ export function WorkspaceDock() {
       })
       setSelectedFile({ ...selectedFile, mtimeMs: res.mtimeMs })
       setDirty(false)
-      setStatusMsg('已保存')
+      setStatusMsg('Saved')
     } catch (err) {
-      setStatusMsg(err instanceof Error ? err.message : '保存失败')
+      setStatusMsg(err instanceof Error ? err.message : 'Failed to save')
     }
   }
 
   const createNewFile = async () => {
     if (!workspaceId) return
-    const rel = prompt('输入相对路径（如 notes/todo.md）：')
+    const rel = prompt('Enter relative path (e.g. notes/todo.md):')
     if (!rel?.trim()) return
     await rpc.call('files.write', { workspaceId, path: rel.trim(), content: '' })
     await loadFiles()
@@ -455,14 +455,14 @@ export function WorkspaceDock() {
 
   const createNewDir = async () => {
     if (!workspaceId) return
-    const rel = prompt('输入新目录相对路径：')
+    const rel = prompt('Enter new directory relative path:')
     if (!rel?.trim()) return
     await rpc.call('files.mkdir', { workspaceId, path: rel.trim() })
     await loadFiles()
   }
 
   const deletePath = async (relPath: string) => {
-    if (!workspaceId || !confirm(`确认删除 ${relPath}？`)) return
+    if (!workspaceId || !confirm(`Delete ${relPath}?`)) return
     await rpc.call('files.remove', { workspaceId, path: relPath })
     if (selectedFile?.path === relPath) setSelectedFile(null)
     await loadFiles()
@@ -472,10 +472,10 @@ export function WorkspaceDock() {
     if (!workspaceId) return
     try {
       await apiUploadWorkspaceFile(workspaceId, '', file)
-      setStatusMsg(`已上传 ${file.name}`)
+      setStatusMsg(`Uploaded ${file.name}`)
       await loadFiles()
     } catch (err) {
-      setStatusMsg(err instanceof Error ? err.message : '上传失败')
+      setStatusMsg(err instanceof Error ? err.message : 'Upload failed')
     }
   }
 
@@ -485,10 +485,10 @@ export function WorkspaceDock() {
       <div className="h-12 px-3 border-b border-[#ececec] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1">
           {([
-            ['files', '文件'],
-            ['changes', '变更'],
-            ['tasks', '任务'],
-            ['terminal', '终端']
+            ['files', 'Files'],
+            ['changes', 'Changes'],
+            ['tasks', 'Tasks'],
+            ['terminal', 'Terminal']
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -506,7 +506,7 @@ export function WorkspaceDock() {
           type="button"
           onClick={() => setDockOpen(false)}
           className="p-1 text-[#777] hover:text-[#111] rounded cursor-pointer"
-          title="收起工作台"
+          title="Collapse dock"
         >
           <X size={14} />
         </button>
@@ -515,7 +515,7 @@ export function WorkspaceDock() {
       {dockTab === 'tasks' ? (
         <TasksPane />
       ) : !workspaceId ? (
-        <div className="flex-1 flex items-center justify-center text-xs text-[#999]">无可用工作区</div>
+        <div className="flex-1 flex items-center justify-center text-xs text-[#999]">No workspace available</div>
       ) : dockTab === 'files' ? (
         <div className="flex-1 flex flex-col min-h-0">
           {/* Toolbar */}
@@ -534,16 +534,16 @@ export function WorkspaceDock() {
                   e.target.value = ''
                 }}
               />
-              <button type="button" onClick={() => void createNewFile()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="新建文件">
+              <button type="button" onClick={() => void createNewFile()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="New file">
                 <FilePlus size={13} />
               </button>
-              <button type="button" onClick={() => void createNewDir()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="新建文件夹">
+              <button type="button" onClick={() => void createNewDir()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="New folder">
                 <FolderPlus size={13} />
               </button>
-              <button type="button" onClick={() => fileUploadRef.current?.click()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="上传文件到工作区">
+              <button type="button" onClick={() => fileUploadRef.current?.click()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="Upload file to workspace">
                 <Upload size={13} />
               </button>
-              <button type="button" onClick={() => void loadFiles()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="刷新">
+              <button type="button" onClick={() => void loadFiles()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="Refresh">
                 <RefreshCw size={13} />
               </button>
             </div>
@@ -553,7 +553,7 @@ export function WorkspaceDock() {
           <div className="flex-1 flex flex-col min-h-0">
             <div className={`${selectedFile ? 'h-44 border-b border-[#ececec]' : 'flex-1'} overflow-y-auto p-1.5 text-xs`}>
               {entries.length === 0 ? (
-                <div className="text-[#999] p-3 text-center">空目录</div>
+                <div className="text-[#999] p-3 text-center">Empty directory</div>
               ) : (
                 entries.map((entry) => (
                   <div
@@ -574,7 +574,7 @@ export function WorkspaceDock() {
                           href={`/api/workspaces/${encodeURIComponent(workspaceId)}/download?path=${encodeURIComponent(entry.path)}`}
                           onClick={(e) => e.stopPropagation()}
                           className="p-0.5 text-[#666] hover:text-[#111]"
-                          title="下载"
+                          title="Download"
                         >
                           <Download size={11} />
                         </a>
@@ -586,7 +586,7 @@ export function WorkspaceDock() {
                           void deletePath(entry.path)
                         }}
                         className="p-0.5 text-[#666] hover:text-red-600"
-                        title="删除"
+                        title="Delete"
                       >
                         <Trash2 size={11} />
                       </button>
@@ -612,7 +612,7 @@ export function WorkspaceDock() {
                         className="flex items-center gap-1 px-2 py-0.5 bg-[#c2542d] text-white rounded text-[11px] disabled:opacity-40 cursor-pointer"
                       >
                         <Save size={11} />
-                        <span>保存</span>
+                        <span>Save</span>
                       </button>
                     )}
                     <button type="button" onClick={() => setSelectedFile(null)} className="text-[#777] hover:text-[#111] cursor-pointer">
@@ -622,7 +622,7 @@ export function WorkspaceDock() {
                 </div>
                 {statusMsg && <div className="px-2.5 py-1 text-[11px] text-[#c2542d] bg-[#c2542d]/5">{statusMsg}</div>}
                 {selectedFile.binary ? (
-                  <div className="flex-1 flex items-center justify-center text-xs text-[#888]">二进制文件不支持文本编辑</div>
+                  <div className="flex-1 flex items-center justify-center text-xs text-[#888]">Binary files cannot be edited as text</div>
                 ) : (
                   <textarea
                     value={selectedFile.content}
@@ -643,7 +643,7 @@ export function WorkspaceDock() {
           <div className="px-3 py-1.5 border-b border-[#efefef] bg-[#fafafa] flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 text-[#555]">
               <GitBranch size={13} />
-              <span>{gitStatus?.isGit ? gitStatus.branch || 'HEAD' : '非 Git 仓库'}</span>
+              <span>{gitStatus?.isGit ? gitStatus.branch || 'HEAD' : 'Not a Git repository'}</span>
             </div>
             <button type="button" onClick={() => void loadGit()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer">
               <RefreshCw size={12} />
@@ -651,9 +651,9 @@ export function WorkspaceDock() {
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
             {!gitStatus?.isGit ? (
-              <div className="text-[#999] text-center py-8">当前工作区不是 Git 仓库</div>
+              <div className="text-[#999] text-center py-8">This workspace is not a Git repository</div>
             ) : diffs.length === 0 ? (
-              <div className="text-[#999] text-center py-8">工作区干净，暂无改动</div>
+              <div className="text-[#999] text-center py-8">Working tree clean, no changes</div>
             ) : (
               diffs.map((d) => (
                 <div key={d.path} className="border border-[#e6e6e6] rounded-lg overflow-hidden">
@@ -665,7 +665,7 @@ export function WorkspaceDock() {
                     </span>
                   </div>
                   <pre className="p-2 overflow-x-auto text-[11px] leading-snug bg-white max-h-72">
-                    {d.patch || '(无文本差异)'}
+                    {d.patch || '(No text diff)'}
                   </pre>
                 </div>
               ))
