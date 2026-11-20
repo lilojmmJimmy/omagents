@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ArrowRightLeft,
   Brain,
@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock,
   Copy,
+  Download,
   EyeOff,
   FastForward,
   FileText,
@@ -16,6 +17,7 @@ import {
   Layers,
   ListTree,
   Loader2,
+  Paperclip,
   Pause,
   Play,
   Reply,
@@ -30,8 +32,62 @@ import {
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { pickLatestRetryableNode, type NodeEvent, type RoomMember, type RoomMessage, type TurnUsage, type WorkNode } from '@myagents/protocol'
+import {
+  pickLatestRetryableNode,
+  type FileRef,
+  type NodeEvent,
+  type RoomMember,
+  type RoomMessage,
+  type TurnUsage,
+  type WorkNode
+} from '@myagents/protocol'
+import { apiUploadBlob, blobUrl } from '../api/rpc-client'
 import { useAppStore, type LiveToolStep, type LiveTurnBuffer } from '../store/app-store'
+
+const SAFE_PREVIEW_IMAGES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function AttachmentList({ attachments, alignRight }: { attachments?: FileRef[]; alignRight?: boolean }) {
+  if (!attachments || attachments.length === 0) return null
+  return (
+    <div className={`mt-1.5 flex flex-wrap gap-2 ${alignRight ? 'justify-end' : 'justify-start'}`}>
+      {attachments.map((att) => {
+        const isImg = SAFE_PREVIEW_IMAGES.has(att.mime)
+        return (
+          <div
+            key={att.fileId}
+            className="border border-[#e3e3e3] bg-white rounded-lg p-1.5 text-[11px] text-[#333] max-w-[240px]"
+          >
+            {isImg && (
+              <a href={blobUrl(att.fileId)} target="_blank" rel="noreferrer" className="block mb-1">
+                <img
+                  src={blobUrl(att.fileId)}
+                  alt={att.filename}
+                  className="max-h-32 max-w-full rounded object-contain bg-[#fafafa]"
+                />
+              </a>
+            )}
+            <a
+              href={blobUrl(att.fileId, true)}
+              download={att.filename}
+              className="flex items-center gap-1.5 hover:text-[#c2542d]"
+              title={`Download ${att.filename}`}
+            >
+              <Download size={11} className="shrink-0" />
+              <span className="truncate font-medium">{att.filename}</span>
+              <span className="text-[#888] shrink-0">({formatBytes(att.sizeBytes)})</span>
+            </a>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function formatTokens(n?: number | null): string {
   if (n === undefined || n === null || !Number.isFinite(n)) return '0'
@@ -294,6 +350,9 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
 
   const [draft, setDraft] = useState('')
   const [replyTarget, setReplyTarget] = useState<RoomMessage | null>(null)
+  const [pendingAttachments, setPendingAttachments] = useState<FileRef[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [copiedPath, setCopiedPath] = useState(false)
   const [nowTick, setNowTick] = useState(() => Date.now())
@@ -305,6 +364,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
   const [handoffLoading, setHandoffLoading] = useState(false)
   const [handoffError, setHandoffError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const roomId = currentRoom?.id
   const messages = roomId ? (messagesByRoom[roomId] ?? []) : []
@@ -400,6 +460,8 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
 
   useEffect(() => {
     setReplyTarget(null)
+    setPendingAttachments([])
+    setUploadError(null)
     setHandoffOpen(false)
     setHandoffError(null)
   }, [roomId])
@@ -435,18 +497,46 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
     )
   }
 
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploadError(null)
+    setUploading(true)
+    try {
+      const uploaded: FileRef[] = []
+      for (const file of Array.from(files)) {
+        uploaded.push(await apiUploadBlob(file))
+      }
+      setPendingAttachments((prev) => [...prev, ...uploaded].slice(0, 10))
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Attachment upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
   const handleSend = async () => {
     const text = draft.trim()
-    if (!text || sending) return
+    if ((!text && pendingAttachments.length === 0) || sending || uploading) return
     const replyId = replyTarget?.id
+    const attachmentsToSend = pendingAttachments
     setDraft('')
     setReplyTarget(null)
+    setPendingAttachments([])
+    setUploadError(null)
     setSending(true)
     try {
-      await sendMessage(currentRoom.id, text, replyId)
+      await sendMessage(
+        currentRoom.id,
+        text,
+        replyId,
+        attachmentsToSend.map((a) => a.fileId)
+      )
     } catch (err) {
       setDraft(text)
-      alert(err instanceof Error ? err.message : '发送失败')
+      setPendingAttachments(attachmentsToSend)
+      alert(err instanceof Error ? err.message : 'Failed to send message')
     } finally {
       setSending(false)
     }
@@ -749,6 +839,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                     <span className="text-[10px] opacity-75">{new Date(m.createdAt).toLocaleTimeString()}</span>
                   </div>
                   <div className="text-sm text-[#222] whitespace-pre-wrap">{m.content}</div>
+                  <AttachmentList attachments={m.attachments} />
                 </div>
               )
             }
@@ -765,6 +856,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                     <span className="text-[10px] text-[#999] font-mono mr-1.5">#m{m.seq}</span>
                     {m.content}
                   </div>
+                  <AttachmentList attachments={m.attachments} alignRight />
                 </div>
               )
             }
@@ -832,6 +924,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 <div className="markdown-body text-sm text-[#111]">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                 </div>
+                <AttachmentList attachments={m.attachments} />
                 <TurnMetricsBar usage={mergedUsage} />
               </div>
             )
@@ -938,6 +1031,33 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             </div>
           )}
           <div className="border border-[#dcdcdc] focus-within:border-[#c2542d] rounded-xl p-2 bg-white">
+            {uploadError && (
+              <div className="mb-1.5 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                {uploadError}
+              </div>
+            )}
+            {pendingAttachments.length > 0 && (
+              <div className="mb-1.5 flex flex-wrap gap-1.5">
+                {pendingAttachments.map((att) => (
+                  <span
+                    key={att.fileId}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#f5f5f5] border border-[#e2e2e2] text-[11px] text-[#333]"
+                  >
+                    <Paperclip size={10} className="text-[#777]" />
+                    <span className="max-w-[160px] truncate">{att.filename}</span>
+                    <span className="text-[#888]">({formatBytes(att.sizeBytes)})</span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.fileId !== att.fileId))}
+                      className="text-[#888] hover:text-red-600 cursor-pointer"
+                      title="Remove attachment"
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -956,13 +1076,32 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
               className="w-full resize-none text-sm focus:outline-none px-1.5 py-1"
             />
             <div className="flex items-center justify-between pt-1 px-1">
-              <span className="text-[11px] text-[#999]">
-                {currentRoom.state === 'paused'
-                  ? '群已暂停'
-                  : activeNode
-                    ? `运行中 (${activeNode.status})`
-                    : '就绪'}
-              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => void handleFileSelect(e)}
+                />
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-[11px] border border-[#dcdcdc] hover:border-[#c2542d] rounded-md text-[#555] hover:text-[#111] disabled:opacity-50 cursor-pointer"
+                  title="Attach files to this message"
+                >
+                  {uploading ? <Loader2 size={12} className="animate-spin" /> : <Paperclip size={12} />}
+                  <span>{uploading ? 'Uploading...' : 'Attach'}</span>
+                </button>
+                <span className="text-[11px] text-[#999]">
+                  {currentRoom.state === 'paused'
+                    ? '群已暂停'
+                    : activeNode
+                      ? `运行中 (${activeNode.status})`
+                      : '就绪'}
+                </span>
+              </div>
               <div className="flex items-center gap-2">
                 {activeNode && (
                   <button
@@ -976,7 +1115,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 )}
                 <button
                   type="button"
-                  disabled={!draft.trim() || sending}
+                  disabled={(!draft.trim() && pendingAttachments.length === 0) || sending || uploading}
                   onClick={() => void handleSend()}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-[#c2542d] hover:bg-[#ad4723] text-white rounded-lg disabled:opacity-40 cursor-pointer"
                 >

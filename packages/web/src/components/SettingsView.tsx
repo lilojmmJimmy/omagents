@@ -1,7 +1,14 @@
-import { useState, type FormEvent } from 'react'
-import { CheckCircle2, KeyRound, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { AlertTriangle, CheckCircle2, HardDrive, KeyRound, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react'
+import type { BlobPurgeResult, BlobStorageSummary } from '@myagents/protocol'
 import { apiChangePassword, rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
 
 export function SettingsView() {
   const providers = useAppStore((s) => s.providers)
@@ -20,6 +27,51 @@ export function SettingsView() {
   const [oldPw, setOldPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [pwMsg, setPwMsg] = useState<string | null>(null)
+
+  // Attachment Blob Storage & Manual Cleanup (double confirmation, no scheduled GC)
+  const [blobSummary, setBlobSummary] = useState<BlobStorageSummary | null>(null)
+  const [blobError, setBlobError] = useState<string | null>(null)
+  const [showUnrefList, setShowUnrefList] = useState(false)
+  const [purgeModalOpen, setPurgeModalOpen] = useState(false)
+  const [purgeConfirmed, setPurgeConfirmed] = useState(false)
+  const [purging, setPurging] = useState(false)
+  const [purgeResult, setPurgeResult] = useState<BlobPurgeResult | null>(null)
+
+  const refreshBlobSummary = async () => {
+    setBlobError(null)
+    try {
+      const summary = await rpc.call<BlobStorageSummary>('blobs.summary')
+      setBlobSummary(summary)
+    } catch (err) {
+      setBlobError(err instanceof Error ? err.message : 'Failed to load blob storage summary')
+    }
+  }
+
+  useEffect(() => {
+    void refreshBlobSummary()
+  }, [])
+
+  const openPurgeModal = () => {
+    setPurgeConfirmed(false)
+    setPurgeModalOpen(true)
+  }
+
+  const handleConfirmPurge = async () => {
+    if (!purgeConfirmed || purging) return
+    setPurging(true)
+    setBlobError(null)
+    try {
+      const res = await rpc.call<BlobPurgeResult>('blobs.purgeUnreferenced', { confirm: true })
+      setPurgeResult(res)
+      setPurgeModalOpen(false)
+      setPurgeConfirmed(false)
+      await refreshBlobSummary()
+    } catch (err) {
+      setBlobError(err instanceof Error ? err.message : 'Cleanup failed')
+    } finally {
+      setPurging(false)
+    }
+  }
 
   const handleSaveProvider = async (e: FormEvent) => {
     e.preventDefault()
@@ -203,7 +255,167 @@ export function SettingsView() {
           </form>
           {pwMsg && <div className="text-xs text-[#c2542d]">{pwMsg}</div>}
         </section>
+
+        {/* Attachment Blob Storage */}
+        <section className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-[#111]">
+              <HardDrive size={15} className="text-[#c2542d]" />
+              <span>Attachment Blob Storage</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void refreshBlobSummary()}
+                className="flex items-center gap-1 text-xs text-[#666] hover:text-[#111] cursor-pointer"
+              >
+                <RefreshCw size={12} />
+                <span>Refresh</span>
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !blobSummary || (blobSummary.unreferencedFiles === 0 && blobSummary.outboxPendingCount === 0)
+                }
+                onClick={openPurgeModal}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 cursor-pointer"
+              >
+                <Trash2 size={12} />
+                <span>Clean Up Unreferenced Blobs</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#666]">
+            Chat and inbox attachments are deduplicated by SHA-256 on disk. Unused blobs from deleted rooms or inbox tickets remain until you explicitly remove them here.
+          </p>
+
+          {blobError && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {blobError}
+            </div>
+          )}
+
+          {purgeResult && (
+            <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Cleanup completed: removed {purgeResult.deletedFileRecords} unreferenced file record(s) and{' '}
+              {purgeResult.deletedPhysicalBlobs} physical blob(s), reclaiming {formatBytes(purgeResult.reclaimedBytes)}.
+              {purgeResult.errors.length > 0 && ` Errors: ${purgeResult.errors.join('; ')}`}
+            </div>
+          )}
+
+          {blobSummary && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-4 gap-3 text-xs">
+                <div className="border border-[#efefef] rounded-lg p-2.5 bg-[#fafafa]">
+                  <div className="text-[#777]">Total Files</div>
+                  <div className="text-sm font-semibold text-[#111] mt-0.5">{blobSummary.totalFiles}</div>
+                  <div className="text-[11px] text-[#888] font-mono">{formatBytes(blobSummary.totalBytes)}</div>
+                </div>
+                <div className="border border-[#efefef] rounded-lg p-2.5 bg-[#fafafa]">
+                  <div className="text-[#777]">Referenced</div>
+                  <div className="text-sm font-semibold text-emerald-700 mt-0.5">{blobSummary.referencedFiles}</div>
+                  <div className="text-[11px] text-[#888] font-mono">{formatBytes(blobSummary.referencedBytes)}</div>
+                </div>
+                <div className="border border-[#efefef] rounded-lg p-2.5 bg-[#fafafa]">
+                  <div className="text-[#777]">Unreferenced (Reclaimable)</div>
+                  <div className="text-sm font-semibold text-amber-700 mt-0.5">{blobSummary.unreferencedFiles}</div>
+                  <div className="text-[11px] text-[#888] font-mono">{formatBytes(blobSummary.unreferencedBytes)}</div>
+                </div>
+                <div className="border border-[#efefef] rounded-lg p-2.5 bg-[#fafafa]">
+                  <div className="text-[#777]">Deletion Queue</div>
+                  <div className="text-sm font-semibold text-[#111] mt-0.5">{blobSummary.outboxPendingCount}</div>
+                  <div className="text-[11px] text-[#888]">Awaiting manual cleanup</div>
+                </div>
+              </div>
+
+              {blobSummary.unreferencedItems.length > 0 && (
+                <div className="text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setShowUnrefList((v) => !v)}
+                    className="text-[#c2542d] hover:underline cursor-pointer"
+                  >
+                    {showUnrefList ? 'Hide' : 'Show'} unreferenced attachments ({blobSummary.unreferencedItems.length})
+                  </button>
+                  {showUnrefList && (
+                    <div className="mt-2 max-h-44 overflow-y-auto border border-[#efefef] rounded-lg divide-y divide-[#f4f4f4]">
+                      {blobSummary.unreferencedItems.map((item) => (
+                        <div key={item.id} className="px-3 py-1.5 flex items-center justify-between gap-2 text-[11px]">
+                          <span className="truncate font-medium text-[#222]">{item.filename}</span>
+                          <span className="font-mono text-[#888] shrink-0">
+                            {item.mime} · {formatBytes(item.sizeBytes)} · {item.sha256.slice(0, 12)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </div>
+
+      {purgeModalOpen && blobSummary && (
+        <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-md bg-white border border-[#e5e5e5] rounded-xl p-5 space-y-4 shadow-xl text-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-700">
+                <AlertTriangle size={16} />
+                <span>Confirm Unreferenced Blob Deletion</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPurgeModalOpen(false)}
+                className="text-[#777] hover:text-[#111] cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-[#444]">
+              <p>
+                This action will permanently remove{' '}
+                <strong>{blobSummary.unreferencedFiles}</strong> unreferenced file record(s) and{' '}
+                <strong>{blobSummary.outboxPendingCount}</strong> queued deletion entry(ies), freeing up to{' '}
+                <strong className="font-mono">{formatBytes(blobSummary.unreferencedBytes)}</strong> from disk.
+              </p>
+              <p className="text-[#666]">
+                Files still referenced by existing chat messages or inbox items will NOT be touched. Deleted blobs cannot be recovered.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-900 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={purgeConfirmed}
+                onChange={(e) => setPurgeConfirmed(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I confirm these unreferenced files will be permanently deleted from disk.</span>
+            </label>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPurgeModalOpen(false)}
+                className="px-3 py-1.5 border border-[#dcdcdc] rounded-lg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!purgeConfirmed || purging}
+                onClick={() => void handleConfirmPurge()}
+                className="px-3 py-1.5 font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-40 cursor-pointer"
+              >
+                {purging ? 'Deleting...' : 'Confirm Permanent Deletion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

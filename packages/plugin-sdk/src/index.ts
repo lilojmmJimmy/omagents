@@ -18,13 +18,14 @@ export interface PluginContext<TConfig = unknown> {
   instanceId: string
   config: TConfig
   resolveSecret(ref: string): Promise<string | null>
+  storeAttachment?(input: { filename: string; mime?: string; buffer: Buffer }): Promise<FileRef>
   log(level: 'info' | 'warn' | 'error', message: string): void
 }
 
 export interface SourcePlugin<TConfig = unknown> {
   readonly id: string
   readonly name: string
-  readonly configSchema: z.ZodType<TConfig>
+  readonly configSchema: z.ZodType<TConfig, z.ZodTypeDef, unknown>
   pull?(ctx: PluginContext<TConfig>, cursor?: string): Promise<{ envelopes: InboundEnvelope[]; nextCursor?: string }>
   parseWebhook?(
     ctx: PluginContext<TConfig>,

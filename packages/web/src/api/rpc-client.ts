@@ -1,4 +1,4 @@
-import type { JsonRpcError, JsonRpcNotification, JsonRpcSuccess } from '@myagents/protocol'
+import type { FileRef, JsonRpcError, JsonRpcNotification, JsonRpcSuccess } from '@myagents/protocol'
 
 type Pending = {
   resolve: (v: any) => void
@@ -176,4 +176,20 @@ export async function apiUploadWorkspaceFile(workspaceId: string, dir: string, f
   const data = (await res.json()) as any
   if (!res.ok) throw new Error(data?.message || 'Upload failed')
   return data
+}
+
+export async function apiUploadBlob(file: File): Promise<FileRef> {
+  const fd = new FormData()
+  fd.append('file', file)
+  const res = await fetch('/api/blobs/upload', {
+    method: 'POST',
+    body: fd
+  })
+  const data = (await res.json()) as any
+  if (!res.ok) throw new Error(data?.message || 'Attachment upload failed')
+  return data as FileRef
+}
+
+export function blobUrl(fileId: string, download = false): string {
+  return `/api/blobs/${encodeURIComponent(fileId)}${download ? '?download=1' : ''}`
 }

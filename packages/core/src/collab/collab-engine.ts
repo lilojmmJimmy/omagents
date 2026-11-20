@@ -31,6 +31,7 @@ import type { AgentService } from '../runtime/agent-service'
 import { resolveClaudeSessionFilePath } from '../runtime/claude-driver'
 import type { AgentDriver, SessionRecord, TurnStreamEvent } from '../runtime/driver'
 import type { SkillRegistryService } from '../runtime/skill-registry'
+import type { BlobService } from '../storage/blob-service'
 import type { CoreDatabase } from '../storage/database'
 import type { WorkspaceService } from '../workspace/workspace-service'
 import { buildTurnContext } from './context-builder'
@@ -278,6 +279,7 @@ export class CollabEngine {
 
   private readonly mcpRegistry?: McpRegistryService
   private readonly skillRegistry?: SkillRegistryService
+  private readonly blobs?: BlobService
 
   constructor(
     private readonly database: CoreDatabase,
@@ -286,10 +288,11 @@ export class CollabEngine {
     private readonly isolator: EnvironmentIsolator,
     private readonly daemon: DaemonClient,
     private readonly events: CollabEvents,
-    extensions?: { mcpRegistry?: McpRegistryService; skillRegistry?: SkillRegistryService }
+    extensions?: { mcpRegistry?: McpRegistryService; skillRegistry?: SkillRegistryService; blobs?: BlobService }
   ) {
     this.mcpRegistry = extensions?.mcpRegistry
     this.skillRegistry = extensions?.skillRegistry
+    this.blobs = extensions?.blobs
     this.registerStrategy(singleStrategy)
     this.registerStrategy(openChannelStrategy)
     this.registerStrategy(roundtableStrategy)
@@ -646,7 +649,19 @@ export class CollabEngine {
       }
     }
 
-    // 4. Hard delete rows
+    // 4. Release blob refs before hard-deleting room & cascaded messages
+    if (this.blobs) {
+      const msgRows = this.database.db
+        .prepare('SELECT id FROM room_messages WHERE room_id = ?')
+        .all(roomId) as Array<{ id: string }>
+      this.blobs.releaseOwnerRefs(
+        'message',
+        msgRows.map((m) => m.id)
+      )
+      this.blobs.releaseOwnerRefs('room', [roomId])
+    }
+
+    // 5. Hard delete rows
     this.database.db.prepare('DELETE FROM rooms WHERE id = ?').run(roomId)
     this.events.roomDeleted(roomId)
   }
@@ -685,7 +700,13 @@ export class CollabEngine {
     }
   ): Promise<{ message: RoomMessage; spawnedRootNodeIds: string[] }> {
     if (this.reconciling) throw Errors.reconciling()
-    if (!input.content.trim()) throw Errors.invalidParams('Message content cannot be empty')
+    const hasAttachments = Boolean(input.attachments && input.attachments.length > 0)
+    const effectiveContent = input.content.trim()
+      ? input.content
+      : hasAttachments
+        ? `[Attached ${input.attachments!.length} file(s)]`
+        : ''
+    if (!effectiveContent.trim()) throw Errors.invalidParams('Message content or attachment is required')
     if (!input.idempotencyKey?.trim()) throw Errors.invalidParams('idempotencyKey is required')
 
     return await this.serially(roomId, () => {
@@ -716,7 +737,7 @@ export class CollabEngine {
           authorId: input.authorId ?? (authorKind === 'intake' ? 'intake' : 'human'),
           authorName: input.authorName || 'admin',
           kind: input.messageKind ?? 'chat',
-          content: input.content,
+          content: effectiveContent,
           attachments: input.attachments ?? [],
           replyToMsgId: input.replyToMsgId ?? null,
           workNodeId: null,
@@ -725,11 +746,18 @@ export class CollabEngine {
           meta: {},
           idempotencyKey: input.idempotencyKey
         })
+        if (this.blobs && msg.attachments.length > 0) {
+          this.blobs.attachRefs(
+            msg.attachments.map((a) => a.fileId),
+            'message',
+            msg.id
+          )
+        }
         emittedMessages.push(msg)
 
         // Update auto-title on first message if still default
         if (msg.seq === 1 && room.strategyId === 'single') {
-          const shortTitle = input.content.split(/\r?\n/)[0]?.trim().slice(0, 40)
+          const shortTitle = effectiveContent.split(/\r?\n/)[0]?.trim().slice(0, 40)
           if (shortTitle) {
             this.database.db.prepare('UPDATE rooms SET title = ?, updated_at = ? WHERE id = ?').run(shortTitle, Date.now(), roomId)
           }
@@ -1660,6 +1688,10 @@ export class CollabEngine {
         lastDeliveredSeq: session.lastDeliveredSeq,
         allowedCollabTools
       })
+      const attachmentsPrompt = this.buildAttachmentsPromptBlock(visibleMessages, latestNodeObj.requestMsgId)
+      if (attachmentsPrompt) {
+        turnContext.instructionPrompt = `${turnContext.instructionPrompt}\n\n${attachmentsPrompt}`
+      }
 
       let nodeEventSeq = 0
       let thinkingBuf = ''
@@ -2485,6 +2517,54 @@ export class CollabEngine {
         return replyError(err instanceof Error ? err.message : String(err))
       }
     })
+  }
+
+  private buildAttachmentsPromptBlock(visibleMessages: RoomMessage[], priorityMsgId: string | null): string {
+    if (!this.blobs) return ''
+    const ordered: RoomMessage[] = []
+    if (priorityMsgId) {
+      const target = visibleMessages.find((m) => m.id === priorityMsgId)
+      if (target) ordered.push(target)
+    }
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      const m = visibleMessages[i]!
+      if (m.id !== priorityMsgId) ordered.push(m)
+    }
+
+    const picked: FileRef[] = []
+    const seen = new Set<string>()
+    for (const m of ordered) {
+      for (const att of m.attachments ?? []) {
+        if (seen.has(att.fileId)) continue
+        seen.add(att.fileId)
+        picked.push(att)
+        if (picked.length >= 6) break
+      }
+      if (picked.length >= 6) break
+    }
+    if (picked.length === 0) return ''
+
+    const sections: string[] = ['[Attached Files]']
+    let remainingChars = 12_000
+    for (const att of picked) {
+      let preview: string | null = null
+      try {
+        preview = this.blobs.readTextPreview(att.fileId, Math.min(4_000, remainingChars))
+      } catch {
+        preview = null
+      }
+      if (preview !== null && remainingChars > 200) {
+        remainingChars -= preview.length
+        sections.push(
+          `- ${att.filename} (fileId=${att.fileId}, mime=${att.mime}, size=${att.sizeBytes}B):\n\`\`\`\n${preview}\n\`\`\``
+        )
+      } else {
+        sections.push(
+          `- ${att.filename} (fileId=${att.fileId}, mime=${att.mime}, size=${att.sizeBytes}B; binary or non-inline content)`
+        )
+      }
+    }
+    return sections.join('\n')
   }
 
   // Used for graceful shutdown (does NOT kill daemon external sessions!)

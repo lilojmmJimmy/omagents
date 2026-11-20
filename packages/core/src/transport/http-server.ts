@@ -10,6 +10,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
 import { WebSocketServer, type RawData, type WebSocket } from 'ws'
 import { AppError } from '../errors'
 import { parseCookieHeader, SESSION_COOKIE_NAME, type AuthService } from '../security/auth-service'
+import type { BlobService } from '../storage/blob-service'
 import { resolveContainedPath } from '../workspace/path-guard'
 import type { TerminalService } from '../workspace/terminal-service'
 import type { WorkspaceService } from '../workspace/workspace-service'
@@ -20,6 +21,7 @@ export interface HttpServerDeps {
   rpcRouter: RpcRouter
   workspaces: WorkspaceService
   terminals: TerminalService
+  blobs?: BlobService
   getHealth: () => { ok: boolean; daemonConnected: boolean; reconciling: boolean; uptimeMs: number; version: string }
   isNonLoopback: boolean
   internalToken?: string
@@ -210,6 +212,42 @@ export async function createCoreHttpServer(deps: HttpServerDeps): Promise<CoreHt
     }
     reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(path.basename(abs))}"`)
     return reply.send(createReadStream(abs))
+  })
+
+  // Attachment Blob upload & download (T-101)
+  fastify.post('/api/blobs/upload', async (req) => {
+    requireAuth(req)
+    if (!deps.blobs) {
+      throw new AppError(RPC_ERROR_CODES.METHOD_NOT_FOUND, 'method_not_found', 'Blob storage service not configured')
+    }
+    const file = await req.file()
+    if (!file) throw new AppError(RPC_ERROR_CODES.INVALID_PARAMS, 'invalid_params', 'No file uploaded')
+    const buffer = await file.toBuffer()
+    return deps.blobs.storeBuffer({
+      filename: file.filename || 'attachment.bin',
+      mime: file.mimetype || 'application/octet-stream',
+      buffer
+    })
+  })
+
+  const SAFE_INLINE_IMAGES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
+  fastify.get('/api/blobs/:fileId', async (req, reply) => {
+    requireAuth(req)
+    if (!deps.blobs) {
+      throw new AppError(RPC_ERROR_CODES.METHOD_NOT_FOUND, 'method_not_found', 'Blob storage service not configured')
+    }
+    const { fileId } = req.params as { fileId: string }
+    const query = (req.query ?? {}) as { download?: string }
+    const meta = deps.blobs.getFileMeta(fileId)
+    if (!existsSync(meta.absPath) || !statSync(meta.absPath).isFile()) {
+      throw new AppError(RPC_ERROR_CODES.NOT_FOUND, 'not_found', 'Attachment blob missing from disk')
+    }
+    const allowInline = query.download !== '1' && SAFE_INLINE_IMAGES.has(meta.mime)
+    const disp = allowInline ? 'inline' : 'attachment'
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('Content-Type', meta.mime)
+    reply.header('Content-Disposition', `${disp}; filename="${encodeURIComponent(meta.filename)}"`)
+    return reply.send(createReadStream(meta.absPath))
   })
 
   // Encapsulated Webhook raw-body capture scope (leaves /api JSON parser untouched)

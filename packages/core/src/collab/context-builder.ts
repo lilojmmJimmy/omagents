@@ -40,7 +40,11 @@ function formatMessageLine(
   }
   const privTag = msg.visibilityScope === 'private' ? ' [PRIVATE]' : ''
   const replyTag = msg.replyToMsgId ? ' (replying)' : ''
-  return `#m${msg.seq} [${author}${privTag}]${replyTag}: ${content}`
+  const attTag =
+    msg.attachments && msg.attachments.length > 0
+      ? ` [Attachments: ${msg.attachments.map((a) => `${a.filename} (${a.sizeBytes}B)`).join(', ')}]`
+      : ''
+  return `#m${msg.seq} [${author}${privTag}]${replyTag}: ${content}${attTag}`
 }
 
 export function buildTurnContext(opts: {
