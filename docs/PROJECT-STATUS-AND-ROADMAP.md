@@ -1,8 +1,8 @@
 # MyAgents Project Status & Next-Phase Roadmap
 
-> **Current Baseline**: `v0.2b` (`T-101`, `T-103`, `T-301` [Email & GitHub], `T-302` delivered alongside `v0.2a`; all `P3` items deferred)  
+> **Current Baseline**: `v0.2b` (`T-101`, `T-103`, `T-301` [Email & GitHub], `T-302` delivered alongside `v0.2a`; all `P3` items deferred; `P4` [`T-401`] tracked separately pending explicit user confirmation)  
 > **Updated**: `2026-11-20`  
-> **Scope**: Single entry point summarizing delivered capabilities, verified quality baseline, and remaining deferred `P3` backlog.
+> **Scope**: Single entry point summarizing delivered capabilities, verified quality baseline, remaining deferred `P3` backlog, and on-demand `P4` items.
 
 ---
 
@@ -111,13 +111,13 @@ Latest verification results after `v0.2b` (`T-101`, `T-103`, `T-301`, `T-302`) d
 ## 4. Backlog & Next-Phase Roadmap
 
 > Reserved tables and SPI contracts (`files`, `file_refs`, `file_deletion_outbox`, `mcp_servers`, `skills`, `background_jobs`, `approval_requests`, `ApprovalGate`, `reply_target_json`) already exist in the codebase.  
-> **Active Priority Policy**: All `P3` items (`T-102`, `T-203`, `T-303`, `T-304`) are currently deferred and excluded from active scheduling.
+> **Active Priority Policy**: All `P3` items (`T-102`, `T-203`, `T-303`, `T-304`) are currently deferred and excluded from active scheduling. `P4` item **`T-401` (Scheduled Attachment Blob GC)** is tracked separately and must only be started upon explicit user confirmation.
 
 ### 4.1 Group A: Remaining `v0.1` Tail Items
 
 | ID | Priority | Status | Task | Reserved Infra | Scope & Acceptance Criteria |
 | --- | :---: | :---: | :--- | :--- | :--- |
-| **T-101** | P1 | **Delivered** | **Chat & Inbox Attachment Blob Storage + Manual Cleanup** | `files`, `file_refs`, `file_deletion_outbox` tables ([database.ts](../packages/core/src/storage/database.ts#L259-L289)) | Content-addressed SHA-256 store (`~/.myagents/blobs/<aa>/<bb>/<sha256>`), transactional `file_refs`, chat/inbox upload & preview, agent prompt attachment injection, and double-confirmed manual disk cleanup button in Settings (scheduled GC omitted) |
+| **T-101** | P1 | **Delivered** | **Chat & Inbox Attachment Blob Storage + Manual Cleanup** | `files`, `file_refs`, `file_deletion_outbox` tables ([database.ts](../packages/core/src/storage/database.ts#L259-L289)) | Content-addressed SHA-256 store (`~/.myagents/blobs/<aa>/<bb>/<sha256>`), transactional `file_refs`, chat/inbox upload & preview, agent prompt attachment injection, and double-confirmed manual disk cleanup button in Settings (scheduled GC split out into `P4` `T-401`) |
 | **T-102** | P3 | **Deferred / Open** | **Gemini / ACP CLI Live Integration & Resume Eval** | `AcpCliDriver` ([cli-drivers.ts](../packages/core/src/runtime/cli-drivers.ts)) | Deferred (`P3`): `CodexCliDriver` stdin/EOF, native resume, dynamic MCP, and isolation flags are verified; live `gemini` CLI integration and native ACP resume/MCP eval deferred |
 | **T-103** | P2 | **Delivered** | **Inbox UX Polish (Rule Workspace + Outbound Reply)** | `inbox_items.reply_target_json`, `RoutingRuleAction.workspaceId` | Added target project workspace selector in [InboxView.tsx](../packages/web/src/components/InboxView.tsx) routing rule form, manual reply action, and source plugin outbound reply callback on resolution |
 
@@ -137,6 +137,12 @@ Latest verification results after `v0.2b` (`T-101`, `T-103`, `T-301`, `T-302`) d
 | **T-302** | P2 | **Delivered** | **Global Usage & Cost Analytics Dashboard** | Aggregated `work_nodes.usage_json` across rooms, agents, models, and `24h`/`7d`/`30d`/`all` time windows in [AnalyticsView.tsx](../packages/web/src/components/AnalyticsView.tsx) |
 | **T-303** | P3 | **Deferred / Open** | **Consistent Async Backups (S3 / Off-site Sync)** | Deferred (`P3`): local `VACUUM INTO` SQLite WAL snapshots + retention pruning shipped in **T-202**; S3-compatible off-site archive upload and checksum verification deferred |
 | **T-304** | P3 | **Deferred / Open** | **Managed Browser Tool & Multi-User RBAC** | Deferred (`P3`): controlled browser automation tool and multi-user role-based access control + audit trail |
+
+### 4.4 Group D: P4 Optional / On-Demand Operations
+
+| ID | Priority | Status | Task | Reserved Infra | Scope & Acceptance Criteria |
+| --- | :---: | :---: | :--- | :--- | :--- |
+| **T-401** | P4 | **Deferred (User Confirmation Required)** | **Scheduled Attachment Blob GC** | `file_deletion_outbox` ([database.ts](../packages/core/src/storage/database.ts#L280)), `BlobService.purgeUnreferenced` ([blob-service.ts](../packages/core/src/storage/blob-service.ts)), `JobSchedulerService` ([job-scheduler.ts](../packages/core/src/jobs/job-scheduler.ts)) | Split out from `T-101` (manual double-confirmed cleanup in Settings remains the default). Start only after explicit user confirmation: add an opt-in `blob_gc` built-in job handler with configurable grace period / retention policy and an off-by-default cron schedule toggle to asynchronously purge unreferenced blobs without breaking manual cleanup |
 
 ---
 
