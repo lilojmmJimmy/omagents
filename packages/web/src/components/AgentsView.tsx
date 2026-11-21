@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import { Bot, MessageSquare, Plus, Shield, SlidersHorizontal, Trash2 } from 'lucide-react'
 import type { Agent, DriverKind, IsolationMode, PermissionMode } from '@myagents/protocol'
+import { Bot, MessageSquare, Plus, Shield, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
 import { rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -40,7 +40,7 @@ export function AgentsView() {
         name,
         bio,
         driverKind,
-        providerId: driverKind === 'builtin' ? (providerId || providers[0]?.id || null) : null,
+        providerId: driverKind === 'builtin' ? providerId || providers[0]?.id || null : null,
         driverConfig: model.trim() ? { model: model.trim() } : {},
         permissionMode,
         isolationMode,
@@ -106,7 +106,10 @@ export function AgentsView() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-base font-semibold text-[#111]">Agents</h1>
-            <p className="text-xs text-[#666] mt-0.5">Supports in-process Builtin Agents and external CLIs (Claude Code, Codex, Gemini/ACP), each assigned an isolated private workspace.</p>
+            <p className="text-xs text-[#666] mt-0.5">
+              Supports in-process Builtin Agents and external CLIs (Claude Code, Codex, Gemini/ACP), each assigned an
+              isolated private workspace.
+            </p>
           </div>
           <button
             type="button"
@@ -229,8 +232,12 @@ export function AgentsView() {
                 className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg bg-white"
               >
                 <option value="standard">standard — Shared host config, scoped by workspace permissions</option>
-                <option value="isolated-home">isolated-home — Isolated home dir + sanitized env (dedicated CLAUDE_CONFIG_DIR)</option>
-                <option value="lockdown">lockdown — Strict read-only lockdown (native write/shell disabled, collab primitives only)</option>
+                <option value="isolated-home">
+                  isolated-home — Isolated home dir + sanitized env (dedicated CLAUDE_CONFIG_DIR)
+                </option>
+                <option value="lockdown">
+                  lockdown — Strict read-only lockdown (native write/shell disabled, collab primitives only)
+                </option>
               </select>
             </div>
 
@@ -300,10 +307,17 @@ export function AgentsView() {
 
             {error && <div className="text-xs text-red-600">{error}</div>}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setCreating(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setCreating(false)}
+                className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer"
+              >
                 Cancel
               </button>
-              <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+              <button
+                type="submit"
+                className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer"
+              >
                 Save & Create Private Workspace
               </button>
             </div>
@@ -323,12 +337,18 @@ export function AgentsView() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Bot size={15} className="text-[#c2542d]" />
                       <span className="text-sm font-medium text-[#111]">{a.name}</span>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">{a.driverKind}</span>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555]">{a.permissionMode}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">
+                        {a.driverKind}
+                      </span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555]">
+                        {a.permissionMode}
+                      </span>
                       {a.isolationMode !== 'standard' && (
                         <span
                           className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded font-mono ${
-                            a.isolationMode === 'lockdown' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-blue-50 text-blue-700'
+                            a.isolationMode === 'lockdown'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-blue-50 text-blue-700'
                           }`}
                         >
                           <Shield size={10} />
@@ -347,7 +367,9 @@ export function AgentsView() {
                       )}
                     </div>
                     {a.bio && <p className="text-xs text-[#666]">{a.bio}</p>}
-                    <p className="text-[11px] text-[#999] font-mono truncate">Private workspace: {a.defaultWorkspacePath}</p>
+                    <p className="text-[11px] text-[#999] font-mono truncate">
+                      Private workspace: {a.defaultWorkspacePath}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button

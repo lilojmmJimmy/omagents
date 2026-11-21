@@ -1,8 +1,8 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
 import type { Agent, Workspace } from '@myagents/protocol'
+import { afterEach, describe, expect, it } from 'vitest'
 import { AgentEnvironmentIsolator } from './environment-isolator'
 
 function makeAgent(overrides: Partial<Agent> = {}): Agent {
@@ -164,7 +164,9 @@ describe('AgentEnvironmentIsolator (5-Layer Isolation)', () => {
       readonlyRefPaths: [refDir]
     })
     expect(fenced.profile.level).toBe('fenced-ro')
-    expect(fenced.profile.disallowedTools).toEqual(expect.arrayContaining(['Write', 'Edit', 'MultiEdit', 'Agent', 'Task']))
+    expect(fenced.profile.disallowedTools).toEqual(
+      expect.arrayContaining(['Write', 'Edit', 'MultiEdit', 'Agent', 'Task'])
+    )
     expect(fenced.profile.allowedTools.some((r) => r.startsWith('Read(') && r.includes('/knowledge/**'))).toBe(true)
     expect(fenced.profile.allowedTools.some((r) => r.startsWith('Read(') && r.endsWith('spec.md)'))).toBe(true)
     expect(fenced.profile.disallowedTools.some((r) => r.startsWith('Edit(') && r.includes('/knowledge/**'))).toBe(true)
@@ -182,10 +184,7 @@ describe('AgentEnvironmentIsolator (5-Layer Isolation)', () => {
     expect(lockdown.profile.level).toBe('lockdown')
     expect(lockdown.profile.cleanEnv).toBe(true)
     expect(lockdown.profile.disallowedTools).toContain('Bash')
-    expect(lockdown.profile.allowedTools).toEqual([
-      'mcp__myagents__collab_history',
-      'mcp__myagents__collab_publish'
-    ])
+    expect(lockdown.profile.allowedTools).toEqual(['mcp__myagents__collab_history', 'mcp__myagents__collab_publish'])
   })
 
   it('changes configHash when prompt, model, or mcp config drifts', async () => {

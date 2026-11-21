@@ -1,12 +1,12 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { myagentsBlobsDir, myagentsHome } from '@myagents/protocol/node'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
-import { myagentsBlobsDir, myagentsHome } from '@myagents/protocol/node'
 import { startCoreServer } from '../main'
 import { BlobService } from './blob-service'
 import { CoreDatabase } from './database'
@@ -21,9 +21,7 @@ beforeAll(async () => {
   process.env.MYAGENTS_HOME = path.join(tmpDir, 'home')
   mkdirSync(process.env.MYAGENTS_HOME, { recursive: true })
   daemonEndpoint =
-    process.platform === 'win32'
-      ? `\\\\.\\pipe\\myagents-blob-test-${Date.now()}`
-      : path.join(tmpDir, 'daemon.sock')
+    process.platform === 'win32' ? `\\\\.\\pipe\\myagents-blob-test-${Date.now()}` : path.join(tmpDir, 'daemon.sock')
 
   const here = path.dirname(fileURLToPath(import.meta.url))
   const daemonEntry = path.resolve(here, '../../../daemon/src/main.ts')
@@ -152,7 +150,10 @@ describe('BlobService & Manual Cleanup (T-101)', () => {
         req.on('data', (c) => (body += c))
         req.on('end', () => {
           const parsed = JSON.parse(body) as { messages: Array<{ role: string; content: string }> }
-          lastUserPrompt = parsed.messages.filter((m) => m.role === 'user').map((m) => m.content).join('\n')
+          lastUserPrompt = parsed.messages
+            .filter((m) => m.role === 'user')
+            .map((m) => m.content)
+            .join('\n')
           res.writeHead(200, { 'Content-Type': 'text/event-stream' })
           res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Read the log cleanly.' } }] })}\n\n`)
           res.write('data: [DONE]\n\n')

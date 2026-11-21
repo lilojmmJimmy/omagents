@@ -3,11 +3,11 @@ import net from 'node:net'
 import path from 'node:path'
 import {
   createNdjsonParser,
-  daemonEndpointPath,
-  daemonMethods,
   type DaemonEvent,
   type DaemonMethod,
-  type DaemonRequestFrame
+  type DaemonRequestFrame,
+  daemonEndpointPath,
+  daemonMethods
 } from '@myagents/protocol/node'
 import { createSessionHost } from './session-host'
 

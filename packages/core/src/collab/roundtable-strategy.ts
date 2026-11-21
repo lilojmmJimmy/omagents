@@ -1,12 +1,12 @@
 import {
-  WorkspaceMode,
   type CollabStrategy,
   type EngineAction,
   type RoomControlAction,
   type RoomMember,
   type RoomMessage,
   type RoomSnapshot,
-  type WorkNode
+  type WorkNode,
+  WorkspaceMode
 } from '@myagents/protocol'
 import { z } from 'zod'
 
@@ -40,7 +40,10 @@ export type RoundtableState = {
   verdictsBySuperstep: Record<string, Array<{ memberId: string; verdict?: string; status: string }>>
 }
 
-function getParticipants(members: RoomMember[], chairParticipates: boolean): { chair: RoomMember; speakers: RoomMember[] } {
+function getParticipants(
+  members: RoomMember[],
+  chairParticipates: boolean
+): { chair: RoomMember; speakers: RoomMember[] } {
   const active = [...members.filter((m) => m.removedAt === null)].sort((a, b) => a.position - b.position)
   const chair = active.find((m) => m.roleKind === 'chair') ?? active.find((m) => m.roleKind === 'lead') ?? active[0]!
   const nonChairs = active.filter((m) => m.id !== chair.id)
@@ -67,7 +70,10 @@ function buildRoundNodes(opts: {
     assigneeMemberId: member.id,
     kind: 'round_post',
     instruction,
-    expectedResult: round === 1 ? 'Independent position and core rationale' : 'Updated stance (optional verdict: hold/changed/approve/revise)',
+    expectedResult:
+      round === 1
+        ? 'Independent position and core rationale'
+        : 'Updated stance (optional verdict: hold/changed/approve/revise)',
     workspaceMode,
     visibilityOnPublish: blind ? { scope: 'private', allowedMemberIds: [member.id] } : { scope: 'public' },
     superstep
@@ -90,7 +96,8 @@ function buildSummaryAction(chair: RoomMember, topic: string, superstep: number,
 export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableState> = {
   id: 'roundtable',
   label: 'Roundtable',
-  description: 'Pregel Super-step multi-agent blind roundtable supporting round-1 isolation, optional anonymity, multi-round convergence, and Chair synthesis handoff.',
+  description:
+    'Pregel Super-step multi-agent blind roundtable supporting round-1 isolation, optional anonymity, multi-round convergence, and Chair synthesis handoff.',
   executionModel: 'superstep',
   configSchema: RoundtableConfigSchema,
   allowedTools: ['collab_publish', 'collab_history', 'collab_remember'],
@@ -111,8 +118,9 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
     const next: RoundtableState = {
       topic: typeof delta.topic === 'string' ? delta.topic : (prev.topic ?? null),
       currentRound: typeof delta.currentRound === 'number' ? delta.currentRound : (prev.currentRound ?? 0),
-      currentSuperstep: typeof delta.currentSuperstep === 'number' ? delta.currentSuperstep : (prev.currentSuperstep ?? 0),
-      phase: (typeof delta.phase === 'string' ? delta.phase : prev.phase ?? 'idle') as RoundtablePhase,
+      currentSuperstep:
+        typeof delta.currentSuperstep === 'number' ? delta.currentSuperstep : (prev.currentSuperstep ?? 0),
+      phase: (typeof delta.phase === 'string' ? delta.phase : (prev.phase ?? 'idle')) as RoundtablePhase,
       lastBarrierSuperstep:
         typeof delta.lastBarrierSuperstep === 'number' ? delta.lastBarrierSuperstep : (prev.lastBarrierSuperstep ?? 0),
       verdictsBySuperstep: { ...(prev.verdictsBySuperstep ?? {}) }
@@ -130,7 +138,9 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
   onHumanMessage(ctx: RoomSnapshot<RoundtableConfig, RoundtableState>, msg: RoomMessage): EngineAction[] {
     const active = ctx.members.filter((m) => m.removedAt === null)
     if (active.length === 0) {
-      return [{ type: 'post_system', text: 'No active member available in this roundtable room.', kind: 'system_notice' }]
+      return [
+        { type: 'post_system', text: 'No active member available in this roundtable room.', kind: 'system_notice' }
+      ]
     }
 
     const phase = ctx.state.phase ?? 'idle'
@@ -369,7 +379,9 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
         .filter((n) => !['completed', 'failed', 'cancelled'].includes(n.status))
         .map((n) => n.id)
       return [
-        ...(cancelIds.length > 0 ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'stopped_by_user' }] : []),
+        ...(cancelIds.length > 0
+          ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'stopped_by_user' }]
+          : []),
         { type: 'update_strategy_state', delta: { phase: 'idle', lastBarrierSuperstep: currentSuperstep } },
         { type: 'set_room_state', state: 'active' },
         { type: 'post_system', text: 'Stopped current roundtable discussion.', kind: 'routing_notice' }
@@ -384,7 +396,9 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
       const nextSuperstep = currentSuperstep + 1
       return [
         ...(privateIds.length > 0 ? [{ type: 'reveal_messages' as const, messageIds: privateIds }] : []),
-        ...(cancelIds.length > 0 ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'summarize_now' }] : []),
+        ...(cancelIds.length > 0
+          ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'summarize_now' }]
+          : []),
         {
           type: 'update_strategy_state',
           delta: {
@@ -395,11 +409,19 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
         },
         buildSummaryAction(chair, topic, nextSuperstep, maxRounds),
         { type: 'set_room_state', state: 'running' },
-        { type: 'post_system', text: 'Early summary triggered by user; Chair is synthesizing results.', kind: 'routing_notice' }
+        {
+          type: 'post_system',
+          text: 'Early summary triggered by user; Chair is synthesizing results.',
+          kind: 'routing_notice'
+        }
       ]
     }
 
-    if (action === 'next_round' || (action === 'resume' && (ctx.state.phase === 'awaiting_next_round' || ctx.state.phase === 'paused_partial_failure'))) {
+    if (
+      action === 'next_round' ||
+      (action === 'resume' &&
+        (ctx.state.phase === 'awaiting_next_round' || ctx.state.phase === 'paused_partial_failure'))
+    ) {
       if (ctx.activeNodes.some((n) => ['queued', 'starting', 'running'].includes(n.status))) {
         return [
           { type: 'set_room_state', state: 'running' },
@@ -428,7 +450,11 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
             phase: 'discussing'
           }
         },
-        { type: 'post_system', text: `Manually advanced to Round ${nextRound} / ${maxRounds}.`, kind: 'routing_notice' },
+        {
+          type: 'post_system',
+          text: `Manually advanced to Round ${nextRound} / ${maxRounds}.`,
+          kind: 'routing_notice'
+        },
         ...buildRoundNodes({
           speakers,
           topic,
@@ -442,7 +468,9 @@ export const roundtableStrategy: CollabStrategy<RoundtableConfig, RoundtableStat
     }
 
     if (action === 'resume') {
-      const hasRunning = ctx.activeNodes.some((n) => ['queued', 'starting', 'running', 'waiting_children'].includes(n.status))
+      const hasRunning = ctx.activeNodes.some((n) =>
+        ['queued', 'starting', 'running', 'waiting_children'].includes(n.status)
+      )
       return [
         { type: 'set_room_state', state: hasRunning ? 'running' : 'active' },
         { type: 'post_system', text: 'Roundtable discussion resumed.', kind: 'routing_notice' }

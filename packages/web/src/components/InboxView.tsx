@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import type { FileRef, InboxItem, InboxStatus, RoutingMatchType } from '@myagents/protocol'
 import {
   CheckCircle2,
   Copy,
@@ -18,7 +18,7 @@ import {
   Workflow,
   X
 } from 'lucide-react'
-import type { FileRef, InboxItem, InboxStatus, RoutingMatchType } from '@myagents/protocol'
+import { type ChangeEvent, type FormEvent, useState } from 'react'
 import { apiUploadBlob, blobUrl, rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -384,15 +384,18 @@ export function InboxView() {
               <span>Unified Inbox & Webhooks</span>
             </h1>
             <p className="text-xs text-[#666] mt-0.5">
-              Ingest external webhooks, SourcePlugins, and manual tickets with default read-only Lockdown isolation, plus automatic or manual room dispatch.
+              Ingest external webhooks, SourcePlugins, and manual tickets with default read-only Lockdown isolation,
+              plus automatic or manual room dispatch.
             </p>
           </div>
           <div className="flex items-center gap-1 p-1 bg-white border border-[#e5e5e5] rounded-lg text-xs">
-            {([
-              ['items', `Tickets (${inboxItems.length})`, Inbox],
-              ['webhooks', `Webhooks & Plugins (${webhooks.length})`, Webhook],
-              ['rules', `Routing Rules (${routingRules.length})`, Workflow]
-            ] as const).map(([key, label, Icon]) => (
+            {(
+              [
+                ['items', `Tickets (${inboxItems.length})`, Inbox],
+                ['webhooks', `Webhooks & Plugins (${webhooks.length})`, Webhook],
+                ['rules', `Routing Rules (${routingRules.length})`, Workflow]
+              ] as const
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
@@ -408,7 +411,9 @@ export function InboxView() {
           </div>
         </div>
 
-        {error && <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+        {error && (
+          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>
+        )}
 
         {/* TAB 1: ITEMS */}
         {tab === 'items' && (
@@ -498,10 +503,18 @@ export function InboxView() {
                     ))}
                   </div>
                   <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setManualOpen(false)} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => setManualOpen(false)}
+                      className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer"
+                    >
                       Cancel
                     </button>
-                    <button type="submit" disabled={manualUploading} className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                    <button
+                      type="submit"
+                      disabled={manualUploading}
+                      className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer"
+                    >
                       Create & Match Rules
                     </button>
                   </div>
@@ -517,16 +530,20 @@ export function InboxView() {
               <div className="space-y-2.5">
                 {visibleItems.map((item) => {
                   const badge = statusBadge(item.status)
-                  const replyInfo = (item.rawMeta?._reply as
+                  const replyInfo = item.rawMeta?._reply as
                     | { status?: string; error?: string; sentAt?: number }
-                    | undefined)
+                    | undefined
                   return (
                     <div key={item.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${badge.cls}`}>{badge.label}</span>
-                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">{item.source}</span>
+                            <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f2] text-[#555] font-mono">
+                              {item.source}
+                            </span>
                             {replyInfo?.status === 'sent' && (
                               <span className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">
                                 Replied
@@ -577,20 +594,22 @@ export function InboxView() {
                             <Send size={11} />
                             <span>Assign</span>
                           </button>
-                          {item.replyTarget && item.sourceInstanceId !== 'default' && item.sourceInstanceId !== 'manual' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReplyOpenId(replyOpenId === item.id ? null : item.id)
-                                setReplyDraft('')
-                              }}
-                              className="flex items-center gap-1 px-2 py-1 text-xs border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg text-[#333] cursor-pointer"
-                              title="Send outbound reply via source channel"
-                            >
-                              <Reply size={11} />
-                              <span>Reply</span>
-                            </button>
-                          )}
+                          {item.replyTarget &&
+                            item.sourceInstanceId !== 'default' &&
+                            item.sourceInstanceId !== 'manual' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyOpenId(replyOpenId === item.id ? null : item.id)
+                                  setReplyDraft('')
+                                }}
+                                className="flex items-center gap-1 px-2 py-1 text-xs border border-[#dcdcdc] hover:border-[#c2542d] rounded-lg text-[#333] cursor-pointer"
+                                title="Send outbound reply via source channel"
+                              >
+                                <Reply size={11} />
+                                <span>Reply</span>
+                              </button>
+                            )}
                           {item.status !== 'resolved' && (
                             <button
                               type="button"
@@ -684,13 +703,18 @@ export function InboxView() {
                     <KeyRound size={14} />
                     <span>Webhook "{createdHookSecret.name}" secret is shown only once. Store it securely:</span>
                   </div>
-                  <button type="button" onClick={() => setCreatedHookSecret(null)} className="text-amber-800 cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={() => setCreatedHookSecret(null)}
+                    className="text-amber-800 cursor-pointer"
+                  >
                     <X size={14} />
                   </button>
                 </div>
                 <div className="font-mono bg-white border border-amber-200 rounded px-2.5 py-1.5 flex items-center justify-between gap-2">
                   <span className="truncate">
-                    POST {window.location.origin}/webhooks/generic/{createdHookSecret.id} · X-Webhook-Secret: {createdHookSecret.secret}
+                    POST {window.location.origin}/webhooks/generic/{createdHookSecret.id} · X-Webhook-Secret:{' '}
+                    {createdHookSecret.secret}
                   </span>
                   <button
                     type="button"
@@ -791,11 +815,7 @@ export function InboxView() {
                         className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
                       />
                       <label className="flex items-center gap-1.5 px-2 text-[#555] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={imapSecure}
-                          onChange={(e) => setImapSecure(e.target.checked)}
-                        />
+                        <input type="checkbox" checked={imapSecure} onChange={(e) => setImapSecure(e.target.checked)} />
                         <span>IMAP TLS</span>
                       </label>
                     </div>
@@ -837,11 +857,7 @@ export function InboxView() {
                         className="px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg bg-white"
                       />
                       <label className="flex items-center gap-1.5 px-2 text-[#555] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={smtpSecure}
-                          onChange={(e) => setSmtpSecure(e.target.checked)}
-                        />
+                        <input type="checkbox" checked={smtpSecure} onChange={(e) => setSmtpSecure(e.target.checked)} />
                         <span>SMTP TLS</span>
                       </label>
                     </div>
@@ -908,10 +924,7 @@ export function InboxView() {
                     />
                     <span>Auto-reply to external channel when resolved</span>
                   </label>
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 bg-[#111] text-white rounded-lg cursor-pointer"
-                  >
+                  <button type="submit" className="px-3 py-1.5 bg-[#111] text-white rounded-lg cursor-pointer">
                     Create Plugin Instance
                   </button>
                 </div>
@@ -929,13 +942,19 @@ export function InboxView() {
                               {inst.pluginId}
                             </span>
                             {desc?.supportsWebhook && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">Webhook</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                                Webhook
+                              </span>
                             )}
                             {desc?.supportsPull && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">Pull</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
+                                Pull
+                              </span>
                             )}
                             {desc?.supportsReply && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Reply</span>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                                Reply
+                              </span>
                             )}
                           </div>
                           {desc?.supportsWebhook && (
@@ -985,7 +1004,10 @@ export function InboxView() {
         {/* TAB 3: ROUTING RULES */}
         {tab === 'rules' && (
           <div className="space-y-4">
-            <form onSubmit={handleCreateRule} className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3 text-xs">
+            <form
+              onSubmit={handleCreateRule}
+              className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3 text-xs"
+            >
               <div className="font-medium text-[#333]">Add Auto-Routing Rule</div>
               <div className="grid grid-cols-4 gap-2.5">
                 <input
@@ -1032,7 +1054,9 @@ export function InboxView() {
                 <input
                   value={ruleMatchExpr}
                   onChange={(e) => setRuleMatchExpr(e.target.value)}
-                  placeholder={ruleMatchType === 'always' ? 'Leave blank to match all' : 'Match expression (e.g. urgent,bug)'}
+                  placeholder={
+                    ruleMatchType === 'always' ? 'Leave blank to match all' : 'Match expression (e.g. urgent,bug)'
+                  }
                   className="col-span-2 px-2.5 py-1.5 border border-[#dcdcdc] rounded-lg font-mono"
                 />
                 <select
@@ -1081,7 +1105,10 @@ export function InboxView() {
                     <span>Allow workspace writes (unchecked = default read-only Lockdown)</span>
                   </label>
                 </div>
-                <button type="submit" className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer"
+                >
                   Save Rule
                 </button>
               </div>
@@ -1094,12 +1121,18 @@ export function InboxView() {
                 </div>
               ) : (
                 routingRules.map((r) => (
-                  <div key={r.id} className="bg-white border border-[#e5e5e5] rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs">
+                  <div
+                    key={r.id}
+                    className="bg-white border border-[#e5e5e5] rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs"
+                  >
                     <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-mono px-1.5 py-0.5 rounded bg-[#f2f2f2]">P{r.priority}</span>
                         <span className="font-medium text-[#111]">{r.name}</span>
-                        <span className="font-mono text-[#666]">{r.matchType}{r.matchExpr ? `: ${r.matchExpr}` : ''}</span>
+                        <span className="font-mono text-[#666]">
+                          {r.matchType}
+                          {r.matchExpr ? `: ${r.matchExpr}` : ''}
+                        </span>
                         <span
                           className={`px-1.5 py-0.5 rounded ${
                             r.allowWrite ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'
@@ -1109,7 +1142,8 @@ export function InboxView() {
                         </span>
                       </div>
                       <div className="text-[11px] text-[#888]">
-                        Target strategy: {r.action.strategyId || 'open-channel'} · Source filter: {r.sourceFilter || '*'}
+                        Target strategy: {r.action.strategyId || 'open-channel'} · Source filter:{' '}
+                        {r.sourceFilter || '*'}
                         {r.action.workspaceId
                           ? ` · Workspace: ${workspaces.find((w) => w.id === r.action.workspaceId)?.name || r.action.workspaceId}`
                           : ''}
@@ -1120,7 +1154,9 @@ export function InboxView() {
                         type="button"
                         onClick={() => void toggleRuleEnabled(r.id)}
                         className={`px-2 py-1 rounded border cursor-pointer ${
-                          r.enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-[#dcdcdc] text-[#888]'
+                          r.enabled
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                            : 'border-[#dcdcdc] text-[#888]'
                         }`}
                       >
                         {r.enabled ? 'Enabled' : 'Disabled'}
@@ -1144,7 +1180,10 @@ export function InboxView() {
       {/* Assign Modal */}
       {assignTarget && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-          <form onSubmit={handleAssignSubmit} className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-3.5 shadow-lg text-xs">
+          <form
+            onSubmit={handleAssignSubmit}
+            className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-3.5 shadow-lg text-xs"
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Assign Ticket: {assignTarget.title}</h3>
               <button type="button" onClick={() => setAssignTarget(null)} className="text-[#777] cursor-pointer">
@@ -1256,10 +1295,17 @@ export function InboxView() {
             </label>
 
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setAssignTarget(null)} className="px-3 py-1.5 border border-[#dcdcdc] rounded-lg cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setAssignTarget(null)}
+                className="px-3 py-1.5 border border-[#dcdcdc] rounded-lg cursor-pointer"
+              >
                 Cancel
               </button>
-              <button type="submit" className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+              <button
+                type="submit"
+                className="px-3 py-1.5 font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer"
+              >
                 Assign & Start
               </button>
             </div>

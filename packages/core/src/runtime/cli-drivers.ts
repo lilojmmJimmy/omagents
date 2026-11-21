@@ -256,13 +256,9 @@ export function parseCodexEventLine(rawLine: string): {
       usage: {
         inputTokens: u.input_tokens,
         cacheReadTokens: u.cached_input_tokens,
-        ...(typeof u.cache_write_input_tokens === 'number'
-          ? { cacheCreationTokens: u.cache_write_input_tokens }
-          : {}),
+        ...(typeof u.cache_write_input_tokens === 'number' ? { cacheCreationTokens: u.cache_write_input_tokens } : {}),
         outputTokens: u.output_tokens,
-        ...(typeof u.reasoning_output_tokens === 'number'
-          ? { thinkingTokens: u.reasoning_output_tokens }
-          : {}),
+        ...(typeof u.reasoning_output_tokens === 'number' ? { thinkingTokens: u.reasoning_output_tokens } : {}),
         contextUsedTokens: (u.input_tokens ?? 0) + (u.cached_input_tokens ?? 0)
       }
     }
@@ -417,7 +413,11 @@ async function runOneShotStreamCli(opts: {
     const firstTimer = setTimeout(() => {
       if (!firstFrame && !settled) {
         void opts.daemon.call('kill', { sessionId, force: true }).catch(() => {})
-        fail(Errors.driverError(`${opts.command} CLI did not produce output within 60s.${stderrBuf ? ` stderr: ${stderrBuf.slice(0, 300)}` : ''}`))
+        fail(
+          Errors.driverError(
+            `${opts.command} CLI did not produce output within 60s.${stderrBuf ? ` stderr: ${stderrBuf.slice(0, 300)}` : ''}`
+          )
+        )
       }
     }, 60_000)
 
@@ -491,7 +491,12 @@ async function runOneShotStreamCli(opts: {
         if (tail) processLine(tail)
         if (!settled) {
           if (ev.exitCode === 0) succeed()
-          else fail(Errors.driverError(`${opts.command} exited with code ${ev.exitCode}${stderrBuf ? `: ${stderrBuf.trim().slice(0, 400)}` : ''}`))
+          else
+            fail(
+              Errors.driverError(
+                `${opts.command} exited with code ${ev.exitCode}${stderrBuf ? `: ${stderrBuf.trim().slice(0, 400)}` : ''}`
+              )
+            )
         }
       }
     })

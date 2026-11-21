@@ -1,11 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type {
-  McpProbeResult,
-  McpServer,
-  McpServerSaveInput,
-  Redactor,
-  SecretProvider
-} from '@myagents/protocol'
+import type { McpProbeResult, McpServer, McpServerSaveInput, Redactor, SecretProvider } from '@myagents/protocol'
 import { Errors } from '../errors'
 import type { CoreDatabase } from '../storage/database'
 import { McpClient, type ResolvedExternalMcpServer } from './mcp-client'
@@ -70,9 +64,9 @@ export class McpRegistryService {
   }
 
   get(id: string): McpServer {
-    const row = this.database.db
-      .prepare('SELECT * FROM mcp_servers WHERE id = ?')
-      .get(id) as unknown as McpServerRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as unknown as
+      | McpServerRow
+      | undefined
     if (!row) throw Errors.notFound(`MCP server not found: ${id}`)
     return mapServer(row)
   }
@@ -87,9 +81,9 @@ export class McpRegistryService {
     const url = input.transport === 'http' ? input.url?.trim() || null : null
 
     if (input.id) {
-      const existing = this.database.db
-        .prepare('SELECT * FROM mcp_servers WHERE id = ?')
-        .get(input.id) as unknown as McpServerRow | undefined
+      const existing = this.database.db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(input.id) as unknown as
+        | McpServerRow
+        | undefined
       if (!existing) throw Errors.notFound(`MCP server not found: ${input.id}`)
 
       const dup = this.database.db
@@ -98,7 +92,8 @@ export class McpRegistryService {
       if (dup) throw Errors.conflict('name_taken', `MCP server name already exists: ${input.name}`)
 
       const nextEnvRefs = input.envRefs === undefined ? existing.env_refs_json : JSON.stringify(input.envRefs)
-      const nextHeaderRefs = input.headerRefs === undefined ? existing.header_refs_json : JSON.stringify(input.headerRefs)
+      const nextHeaderRefs =
+        input.headerRefs === undefined ? existing.header_refs_json : JSON.stringify(input.headerRefs)
       const nextEnabled = input.enabled === undefined ? existing.enabled : input.enabled ? 1 : 0
 
       this.database.db
@@ -123,9 +118,7 @@ export class McpRegistryService {
       return this.get(input.id)
     }
 
-    const dup = this.database.db
-      .prepare('SELECT id FROM mcp_servers WHERE LOWER(name) = LOWER(?)')
-      .get(input.name)
+    const dup = this.database.db.prepare('SELECT id FROM mcp_servers WHERE LOWER(name) = LOWER(?)').get(input.name)
     if (dup) throw Errors.conflict('name_taken', `MCP server name already exists: ${input.name}`)
 
     const id = randomUUID()
@@ -156,9 +149,10 @@ export class McpRegistryService {
       const info = this.database.db.prepare('DELETE FROM mcp_servers WHERE id = ?').run(id)
       if (info.changes === 0) throw Errors.notFound(`MCP server not found: ${id}`)
 
-      const agentRows = this.database.db
-        .prepare('SELECT id, mcp_server_ids_json FROM agents')
-        .all() as Array<{ id: string; mcp_server_ids_json: string }>
+      const agentRows = this.database.db.prepare('SELECT id, mcp_server_ids_json FROM agents').all() as Array<{
+        id: string
+        mcp_server_ids_json: string
+      }>
       const now = Date.now()
       for (const agent of agentRows) {
         const ids = JSON.parse(agent.mcp_server_ids_json || '[]') as string[]
@@ -173,9 +167,9 @@ export class McpRegistryService {
   }
 
   async probe(id: string): Promise<McpProbeResult> {
-    const row = this.database.db
-      .prepare('SELECT * FROM mcp_servers WHERE id = ?')
-      .get(id) as unknown as McpServerRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM mcp_servers WHERE id = ?').get(id) as unknown as
+      | McpServerRow
+      | undefined
     if (!row) throw Errors.notFound(`MCP server not found: ${id}`)
 
     const resolved = await this.resolveRow(row)

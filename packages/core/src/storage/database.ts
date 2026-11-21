@@ -331,8 +331,12 @@ export class CoreDatabase {
   }
 
   private migrate(): void {
-    this.db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL)`)
-    const row = this.db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null } | undefined
+    this.db.exec(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL)`
+    )
+    const row = this.db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as
+      | { v: number | null }
+      | undefined
     const current = row?.v ?? 0
     if (current < 1) {
       this.transaction(() => {

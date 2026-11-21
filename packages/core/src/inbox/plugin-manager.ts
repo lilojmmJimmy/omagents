@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import type { FileRef, PluginDescriptor, PluginInstance, Redactor, SecretProvider } from '@myagents/protocol'
 import type { InboundEnvelope, PluginContext, SourcePlugin } from '@myagents/plugin-sdk'
+import type { FileRef, PluginDescriptor, PluginInstance, Redactor, SecretProvider } from '@myagents/protocol'
 import { z } from 'zod'
 import { Errors } from '../errors'
 import type { BlobService } from '../storage/blob-service'
@@ -79,9 +79,10 @@ export const genericWebhookPlugin: SourcePlugin<{ description?: string }> = {
         content,
         attachments: [],
         rawMeta: parsed,
-        replyTarget: parsed.replyTarget && typeof parsed.replyTarget === 'object'
-          ? (parsed.replyTarget as Record<string, unknown>)
-          : undefined
+        replyTarget:
+          parsed.replyTarget && typeof parsed.replyTarget === 'object'
+            ? (parsed.replyTarget as Record<string, unknown>)
+            : undefined
       }
     ]
   }
@@ -143,9 +144,9 @@ export class PluginManager {
   }
 
   private getInstanceRow(id: string): PluginInstanceRow {
-    const row = this.database.db
-      .prepare('SELECT * FROM plugin_instances WHERE id = ?')
-      .get(id) as unknown as PluginInstanceRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM plugin_instances WHERE id = ?').get(id) as unknown as
+      | PluginInstanceRow
+      | undefined
     if (!row) throw Errors.notFound(`Plugin instance not found: ${id}`)
     return row
   }
@@ -166,9 +167,9 @@ export class PluginManager {
 
     const now = Date.now()
     const id = input.id?.trim() || randomUUID()
-    const existing = this.database.db
-      .prepare('SELECT id, config_json FROM plugin_instances WHERE id = ?')
-      .get(id) as { id: string; config_json: string } | undefined
+    const existing = this.database.db.prepare('SELECT id, config_json FROM plugin_instances WHERE id = ?').get(id) as
+      | { id: string; config_json: string }
+      | undefined
 
     const mergedRawConfig: Record<string, unknown> = { ...(input.config ?? {}) }
     if (existing) {
@@ -187,9 +188,7 @@ export class PluginManager {
 
     if (existing) {
       this.database.db
-        .prepare(
-          'UPDATE plugin_instances SET name = ?, config_json = ?, enabled = ?, updated_at = ? WHERE id = ?'
-        )
+        .prepare('UPDATE plugin_instances SET name = ?, config_json = ?, enabled = ?, updated_at = ? WHERE id = ?')
         .run(input.name.trim(), JSON.stringify(parsedConfig), input.enabled === false ? 0 : 1, now, id)
     } else {
       this.database.db
@@ -197,7 +196,15 @@ export class PluginManager {
           `INSERT INTO plugin_instances (id, plugin_id, name, config_json, enabled, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(id, input.pluginId, input.name.trim(), JSON.stringify(parsedConfig), input.enabled === false ? 0 : 1, now, now)
+        .run(
+          id,
+          input.pluginId,
+          input.name.trim(),
+          JSON.stringify(parsedConfig),
+          input.enabled === false ? 0 : 1,
+          now,
+          now
+        )
     }
     return this.getInstance(id)
   }
@@ -216,9 +223,7 @@ export class PluginManager {
         if (resolved) this.redactor?.registerSecret(resolved)
         return resolved
       },
-      storeAttachment: this.blobs
-        ? async (input) => this.blobs!.storeBuffer(input)
-        : undefined,
+      storeAttachment: this.blobs ? async (input) => this.blobs!.storeBuffer(input) : undefined,
       log: (level, message) => {
         console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](`[plugin:${instanceId}] ${message}`)
       }
@@ -261,9 +266,9 @@ export class PluginManager {
 
   canAutoReply(instanceId: string): boolean {
     if (!instanceId || instanceId === 'default' || instanceId === 'manual') return false
-    const row = this.database.db
-      .prepare('SELECT * FROM plugin_instances WHERE id = ?')
-      .get(instanceId) as unknown as PluginInstanceRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM plugin_instances WHERE id = ?').get(instanceId) as unknown as
+      | PluginInstanceRow
+      | undefined
     if (!row || !row.enabled) return false
     const plugin = this.plugins.get(row.plugin_id)
     if (!plugin?.reply) return false

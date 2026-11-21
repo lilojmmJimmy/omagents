@@ -1,10 +1,10 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Agent, Workspace } from '@myagents/protocol'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DaemonClient } from '../daemon-client'
 import {
   AcpCliDriver,
@@ -284,7 +284,9 @@ describe('CodexCliDriver & AcpCliDriver helpers', () => {
 
     const freshPrompt = combinePrompt(base, { isResume: false })
     expect(freshPrompt).toContain('[System Context]\nBe concise.')
-    expect(freshPrompt).toContain('[Conversation History]\n[admin]: My name is Alice.\n[Worker]: Nice to meet you, Alice.')
+    expect(freshPrompt).toContain(
+      '[Conversation History]\n[admin]: My name is Alice.\n[Worker]: Nice to meet you, Alice.'
+    )
     expect(freshPrompt.match(/What is my name\?/g)?.length).toBe(1)
 
     const multiAgentPrompt = combinePrompt({
@@ -432,13 +434,13 @@ describe('CodexCliDriver & AcpCliDriver helpers', () => {
   })
 
   it('parseAcpEventLine parses message, thinking, tool_use, tool_result, error, and final result stats', () => {
-    expect(
-      parseAcpEventLine(JSON.stringify({ type: 'thinking', content: 'scanning AST' }))
-    ).toEqual({ thinkingDelta: 'scanning AST' })
+    expect(parseAcpEventLine(JSON.stringify({ type: 'thinking', content: 'scanning AST' }))).toEqual({
+      thinkingDelta: 'scanning AST'
+    })
 
-    expect(
-      parseAcpEventLine(JSON.stringify({ type: 'message', role: 'assistant', content: 'Analysis OK' }))
-    ).toEqual({ textDelta: 'Analysis OK' })
+    expect(parseAcpEventLine(JSON.stringify({ type: 'message', role: 'assistant', content: 'Analysis OK' }))).toEqual({
+      textDelta: 'Analysis OK'
+    })
 
     expect(
       parseAcpEventLine(

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { BarChart3, Coins, Cpu, RefreshCw, Timer, Zap } from 'lucide-react'
 import type { UsageAnalyticsReport, UsageWindow } from '@myagents/protocol'
+import { BarChart3, Coins, Cpu, RefreshCw, Timer, Zap } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -53,9 +53,7 @@ export function AnalyticsView() {
 
   const maxBucketTokens = report ? Math.max(1, ...report.byDay.map((d) => d.totalTokens)) : 1
   const successRate =
-    report && report.totals.runs > 0
-      ? Math.round((report.totals.completedRuns / report.totals.runs) * 100)
-      : 0
+    report && report.totals.runs > 0 ? Math.round((report.totals.completedRuns / report.totals.runs) * 100) : 0
 
   return (
     <div className="h-full overflow-y-auto p-6 bg-[#f8f8f8]">
@@ -72,12 +70,14 @@ export function AnalyticsView() {
           </div>
           <div className="flex items-center gap-2 text-xs">
             <div className="flex items-center p-0.5 bg-white border border-[#e5e5e5] rounded-lg">
-              {([
-                ['24h', '24h'],
-                ['7d', '7d'],
-                ['30d', '30d'],
-                ['all', 'All']
-              ] as const).map(([key, label]) => (
+              {(
+                [
+                  ['24h', '24h'],
+                  ['7d', '7d'],
+                  ['30d', '30d'],
+                  ['all', 'All']
+                ] as const
+              ).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
@@ -143,9 +143,7 @@ export function AnalyticsView() {
                   <span>Estimated Cost</span>
                   <Coins size={14} className="text-amber-600" />
                 </div>
-                <div className="text-xl font-semibold text-[#111] font-mono">
-                  {formatCost(report.totals.costUsd)}
-                </div>
+                <div className="text-xl font-semibold text-[#111] font-mono">{formatCost(report.totals.costUsd)}</div>
                 <div className="text-[11px] text-[#888] font-mono">
                   {report.totals.thinkingTokens > 0
                     ? `Thinking: ${formatTokens(report.totals.thinkingTokens)} tok`
@@ -191,7 +189,10 @@ export function AnalyticsView() {
                   {report.byDay.map((b) => {
                     const pct = b.totalTokens > 0 ? Math.max(4, Math.round((b.totalTokens / maxBucketTokens) * 100)) : 2
                     return (
-                      <div key={b.bucket} className="flex-1 h-full flex flex-col justify-end items-center group relative">
+                      <div
+                        key={b.bucket}
+                        className="flex-1 h-full flex flex-col justify-end items-center group relative"
+                      >
                         <div
                           className={`w-full max-w-[28px] rounded-t transition-colors ${
                             b.totalTokens > 0 ? 'bg-[#c2542d]/85 group-hover:bg-[#c2542d]' : 'bg-[#ececec]'

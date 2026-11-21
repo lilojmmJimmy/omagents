@@ -1,5 +1,5 @@
-import type { FileRef } from '@myagents/protocol'
 import type { InboundEnvelope, PluginContext, SourcePlugin } from '@myagents/plugin-sdk'
+import type { FileRef } from '@myagents/protocol'
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import nodemailer from 'nodemailer'
@@ -8,23 +8,25 @@ import { Errors } from '../../errors'
 
 const MAX_EMAIL_ATTACHMENT_BYTES = 25 * 1024 * 1024
 
-export const EmailPluginConfigSchema = z.object({
-  imapHost: z.string().trim().min(1),
-  imapPort: z.coerce.number().int().min(1).max(65535).default(993),
-  imapSecure: z.boolean().default(true),
-  imapUser: z.string().trim().min(1),
-  imapPass: z.string().default(''),
-  mailbox: z.string().trim().min(1).default('INBOX'),
-  maxFetchPerSync: z.coerce.number().int().min(1).max(100).default(20),
-  markSeen: z.boolean().default(false),
-  smtpHost: z.string().trim().optional(),
-  smtpPort: z.coerce.number().int().min(1).max(65535).default(465),
-  smtpSecure: z.boolean().default(true),
-  smtpUser: z.string().trim().optional(),
-  smtpPass: z.string().optional(),
-  fromAddress: z.string().trim().optional(),
-  autoReplyOnResolve: z.boolean().default(true)
-}).passthrough()
+export const EmailPluginConfigSchema = z
+  .object({
+    imapHost: z.string().trim().min(1),
+    imapPort: z.coerce.number().int().min(1).max(65535).default(993),
+    imapSecure: z.boolean().default(true),
+    imapUser: z.string().trim().min(1),
+    imapPass: z.string().default(''),
+    mailbox: z.string().trim().min(1).default('INBOX'),
+    maxFetchPerSync: z.coerce.number().int().min(1).max(100).default(20),
+    markSeen: z.boolean().default(false),
+    smtpHost: z.string().trim().optional(),
+    smtpPort: z.coerce.number().int().min(1).max(65535).default(465),
+    smtpSecure: z.boolean().default(true),
+    smtpUser: z.string().trim().optional(),
+    smtpPass: z.string().optional(),
+    fromAddress: z.string().trim().optional(),
+    autoReplyOnResolve: z.boolean().default(true)
+  })
+  .passthrough()
 
 export type EmailPluginConfig = z.infer<typeof EmailPluginConfigSchema>
 
@@ -64,13 +66,7 @@ export interface SmtpTransportLike {
 }
 
 export interface EmailTransportDeps {
-  createImapClient?(config: {
-    host: string
-    port: number
-    secure: boolean
-    user: string
-    pass: string
-  }): ImapClientLike
+  createImapClient?(config: { host: string; port: number; secure: boolean; user: string; pass: string }): ImapClientLike
   createSmtpTransport?(config: {
     host: string
     port: number
@@ -297,7 +293,8 @@ export function createEmailPlugin(deps: EmailTransportDeps = {}): SourcePlugin<E
         await transport.sendMail({
           from,
           to,
-          subject: typeof target.subject === 'string' && target.subject.trim() ? target.subject.trim() : 'Re: Support Ticket',
+          subject:
+            typeof target.subject === 'string' && target.subject.trim() ? target.subject.trim() : 'Re: Support Ticket',
           text: payload.text,
           inReplyTo: typeof target.inReplyTo === 'string' ? target.inReplyTo : undefined,
           references: Array.isArray(target.references)

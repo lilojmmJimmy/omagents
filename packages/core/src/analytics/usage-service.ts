@@ -250,8 +250,7 @@ export class UsageAnalyticsService {
       const thinkingTokens = num(usage.thinkingTokens)
       const totalTokens = inputTokens + outputTokens
       const costUsd = num(usage.costUsd)
-      const fallbackDuration =
-        row.started_at && row.ended_at ? Math.max(0, row.ended_at - row.started_at) : 0
+      const fallbackDuration = row.started_at && row.ended_at ? Math.max(0, row.ended_at - row.started_at) : 0
       const durationMs = num(usage.durationMs) || fallbackDuration
       const ttftMs = num(usage.ttftMs)
 
@@ -280,7 +279,12 @@ export class UsageAnalyticsService {
 
       let ag = agentAcc.get(row.assignee_agent_id)
       if (!ag) {
-        ag = { agentId: row.assignee_agent_id, agentName: row.agent_name, driverKind: row.driver_kind, acc: createAcc() }
+        ag = {
+          agentId: row.assignee_agent_id,
+          agentName: row.agent_name,
+          driverKind: row.driver_kind,
+          acc: createAcc()
+        }
         agentAcc.set(row.assignee_agent_id, ag)
       }
       addSample(ag.acc, sample)

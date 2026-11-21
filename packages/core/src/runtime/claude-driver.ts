@@ -43,7 +43,10 @@ export function resolveClaudeSessionFilePath(
   return direct
 }
 
-function inferContextWindow(model?: string, modelUsage?: Record<string, { contextWindow?: number }>): number | undefined {
+function inferContextWindow(
+  model?: string,
+  modelUsage?: Record<string, { contextWindow?: number }>
+): number | undefined {
   if (modelUsage) {
     if (model && typeof modelUsage[model]?.contextWindow === 'number' && modelUsage[model]!.contextWindow! > 0) {
       return modelUsage[model]!.contextWindow
@@ -159,7 +162,7 @@ export class ClaudeCodeDriver implements AgentDriver {
     const startedAt = Date.now()
     const command = input.agent.driverConfig.cliPath?.trim() || 'claude'
     let daemonSessionId = input.session.daemonSessionId
-    let nativeSessionId = input.session.nativeSessionId || randomUUID()
+    const nativeSessionId = input.session.nativeSessionId || randomUUID()
     let needsSpawn = true
 
     // Reuse existing live daemon pipe session if configHash matches
@@ -247,9 +250,7 @@ export class ClaudeCodeDriver implements AgentDriver {
       const thinkingTokens = opts?.thinkingTokens ?? (sumThinkingTokens || undefined)
       const genMs = firstOutputAt ? Math.max(100, now - firstOutputAt) : durationMs
       const tokensPerSec =
-        outputTokens && outputTokens > 0 && genMs > 0
-          ? Number((outputTokens / (genMs / 1000)).toFixed(1))
-          : undefined
+        outputTokens && outputTokens > 0 && genMs > 0 ? Number((outputTokens / (genMs / 1000)).toFixed(1)) : undefined
       const ttftMs = firstOutputAt ? Math.max(0, firstOutputAt - startedAt) : undefined
       return {
         model: reportedModel,
@@ -319,7 +320,11 @@ export class ClaudeCodeDriver implements AgentDriver {
       const firstFrameTimer = setTimeout(() => {
         if (!gotFirstFrame && !settled) {
           void this.daemon.call('kill', { sessionId: daemonSessionId }).catch(() => {})
-          fail(Errors.driverError(`Claude Code CLI did not respond within 60s.${stderrBuf ? ` stderr: ${stderrBuf.slice(0, 400)}` : ''}`))
+          fail(
+            Errors.driverError(
+              `Claude Code CLI did not respond within 60s.${stderrBuf ? ` stderr: ${stderrBuf.slice(0, 400)}` : ''}`
+            )
+          )
         }
       }, 60_000)
 
@@ -396,33 +401,38 @@ export class ClaudeCodeDriver implements AgentDriver {
             const blockedByReadonlyDir =
               isEditTool &&
               Boolean(targetFile) &&
-              input.isolation.readonlyDirs.some((d) => isPathOverlapping(path.resolve(input.workspace.rootPath, targetFile!), d))
+              input.isolation.readonlyDirs.some((d) =>
+                isPathOverlapping(path.resolve(input.workspace.rootPath, targetFile!), d)
+              )
             const blockedByReadOnly = (readOnly && isEditTool) || blockedByReadonlyDir
-            const response = blockedBySubagent || blockedByReadOnly
-              ? {
-                  type: 'control_response',
-                  response: {
-                    subtype: 'success',
-                    request_id: frame.request_id,
+            const response =
+              blockedBySubagent || blockedByReadOnly
+                ? {
+                    type: 'control_response',
                     response: {
-                      behavior: 'deny',
-                      message: blockedBySubagent
-                        ? 'Subagent spawning is disabled.'
-                        : blockedByReadonlyDir
-                          ? 'Target directory is read-only.'
-                          : 'Workspace is read-only.'
+                      subtype: 'success',
+                      request_id: frame.request_id,
+                      response: {
+                        behavior: 'deny',
+                        message: blockedBySubagent
+                          ? 'Subagent spawning is disabled.'
+                          : blockedByReadonlyDir
+                            ? 'Target directory is read-only.'
+                            : 'Workspace is read-only.'
+                      }
                     }
                   }
-                }
-              : {
-                  type: 'control_response',
-                  response: {
-                    subtype: 'success',
-                    request_id: frame.request_id,
-                    response: { behavior: 'allow', updatedInput: req.input ?? {} }
+                : {
+                    type: 'control_response',
+                    response: {
+                      subtype: 'success',
+                      request_id: frame.request_id,
+                      response: { behavior: 'allow', updatedInput: req.input ?? {} }
+                    }
                   }
-                }
-            void this.daemon.call('write', { sessionId: daemonSessionId, data: `${JSON.stringify(response)}\n` }).catch(() => {})
+            void this.daemon
+              .call('write', { sessionId: daemonSessionId, data: `${JSON.stringify(response)}\n` })
+              .catch(() => {})
           } else {
             const errResp = {
               type: 'control_response',
@@ -432,7 +442,9 @@ export class ClaudeCodeDriver implements AgentDriver {
                 error: `Unsupported control request: ${String(req.subtype ?? 'unknown')}`
               }
             }
-            void this.daemon.call('write', { sessionId: daemonSessionId, data: `${JSON.stringify(errResp)}\n` }).catch(() => {})
+            void this.daemon
+              .call('write', { sessionId: daemonSessionId, data: `${JSON.stringify(errResp)}\n` })
+              .catch(() => {})
           }
           return
         }
@@ -588,7 +600,13 @@ export class ClaudeCodeDriver implements AgentDriver {
                   typeof rawContent === 'string'
                     ? rawContent
                     : Array.isArray(rawContent)
-                      ? rawContent.map((c) => (typeof (c as { text?: unknown })?.text === 'string' ? (c as { text: string }).text : JSON.stringify(c))).join('\n')
+                      ? rawContent
+                          .map((c) =>
+                            typeof (c as { text?: unknown })?.text === 'string'
+                              ? (c as { text: string }).text
+                              : JSON.stringify(c)
+                          )
+                          .join('\n')
                       : JSON.stringify(rawContent ?? '')
                 input.emit({
                   kind: 'tool_result',
@@ -623,7 +641,10 @@ export class ClaudeCodeDriver implements AgentDriver {
           const resolvedWin = inferContextWindow(reportedModel, modelUsage)
           if (resolvedWin) contextWindow = resolvedWin
           if (!latestContextUsed) {
-            const used = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+            const used =
+              (usage.input_tokens ?? 0) +
+              (usage.cache_creation_input_tokens ?? 0) +
+              (usage.cache_read_input_tokens ?? 0)
             const turns = typeof frame.num_turns === 'number' && frame.num_turns > 1 ? frame.num_turns : 1
             if (used > 0) latestContextUsed = Math.round(used / turns)
           }
@@ -691,7 +712,9 @@ export class ClaudeCodeDriver implements AgentDriver {
           request: { subtype: 'initialize' }
         })
         this.daemon.call('write', { sessionId: daemonSessionId, data: `${initFrame}\n` }).catch((err) => {
-          fail(Errors.driverError(`Failed initializing Claude CLI: ${err instanceof Error ? err.message : String(err)}`))
+          fail(
+            Errors.driverError(`Failed initializing Claude CLI: ${err instanceof Error ? err.message : String(err)}`)
+          )
         })
       } else {
         userMessageSent = false

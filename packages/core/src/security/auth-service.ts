@@ -52,14 +52,16 @@ export class AuthService implements AuthGuard {
     const password = process.env.MYAGENTS_ADMIN_PASS ?? 'admin'
     const isDefault = username === 'admin' && password === 'admin' ? 1 : 0
     this.database.db
-      .prepare('INSERT INTO auth_config (id, username, password_hash, is_default_password, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO auth_config (id, username, password_hash, is_default_password, updated_at) VALUES (?, ?, ?, ?, ?)'
+      )
       .run('default', username, hashPassword(password), isDefault, Date.now())
   }
 
   isDefaultPassword(): boolean {
-    const row = this.database.db
-      .prepare('SELECT is_default_password FROM auth_config WHERE id = ?')
-      .get('default') as { is_default_password: number } | undefined
+    const row = this.database.db.prepare('SELECT is_default_password FROM auth_config WHERE id = ?').get('default') as
+      | { is_default_password: number }
+      | undefined
     return Boolean(row?.is_default_password)
   }
 
@@ -74,7 +76,9 @@ export class AuthService implements AuthGuard {
     const now = Date.now()
     const expiresAt = now + SESSION_TTL_MS
     this.database.db
-      .prepare('INSERT INTO auth_sessions (token_hash, username, expires_at, created_at, last_used_at) VALUES (?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO auth_sessions (token_hash, username, expires_at, created_at, last_used_at) VALUES (?, ?, ?, ?, ?)'
+      )
       .run(sha256(token), row.username, expiresAt, now, now)
     this.pruneExpired()
     return { token, username: row.username, expiresAt }
@@ -87,9 +91,9 @@ export class AuthService implements AuthGuard {
 
   changePassword(currentToken: string, oldPassword: string, newPassword: string): void {
     if (newPassword.length < 4) throw Errors.invalidParams('New password must be at least 4 characters')
-    const row = this.database.db
-      .prepare('SELECT password_hash FROM auth_config WHERE id = ?')
-      .get('default') as { password_hash: string } | undefined
+    const row = this.database.db.prepare('SELECT password_hash FROM auth_config WHERE id = ?').get('default') as
+      | { password_hash: string }
+      | undefined
     if (!row || !verifyPassword(oldPassword, row.password_hash)) {
       throw Errors.unauthorized('Current password is incorrect')
     }

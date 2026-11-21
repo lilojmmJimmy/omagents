@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -56,7 +56,10 @@ function startMockOpenAiServer(): Promise<{ server: http.Server; port: number }>
           } else {
             // Second step: return final text answer
             const c1 = { choices: [{ delta: { content: 'Done! Wrote ' } }] }
-            const c2 = { choices: [{ delta: { content: 'notes/e2e.txt.' } }], usage: { prompt_tokens: 42, completion_tokens: 12 } }
+            const c2 = {
+              choices: [{ delta: { content: 'notes/e2e.txt.' } }],
+              usage: { prompt_tokens: 42, completion_tokens: 12 }
+            }
             res.write(`data: ${JSON.stringify(c1)}\n\n`)
             res.write(`data: ${JSON.stringify(c2)}\n\n`)
             res.write('data: [DONE]\n\n')
@@ -81,7 +84,10 @@ async function rpcCall(ws: WebSocket, id: string, method: string, params: Record
       const parsed = JSON.parse(raw.toString('utf8'))
       if (parsed.id !== id) return
       ws.off('message', onMsg)
-      if (parsed.error) reject(Object.assign(new Error(parsed.error.message), { code: parsed.error.code, reason: parsed.error.data?.reason }))
+      if (parsed.error)
+        reject(
+          Object.assign(new Error(parsed.error.message), { code: parsed.error.code, reason: parsed.error.data?.reason })
+        )
       else resolve(parsed.result)
     }
     ws.on('message', onMsg)
@@ -93,9 +99,7 @@ beforeAll(async () => {
   tmpHome = mkdtempSync(path.join(os.tmpdir(), 'myagents-e2e-'))
   process.env.MYAGENTS_HOME = tmpHome
   daemonEndpoint =
-    process.platform === 'win32'
-      ? `\\\\.\\pipe\\myagents-test-${Date.now()}`
-      : path.join(tmpHome, 'daemon.sock')
+    process.platform === 'win32' ? `\\\\.\\pipe\\myagents-test-${Date.now()}` : path.join(tmpHome, 'daemon.sock')
 
   const here = path.dirname(fileURLToPath(import.meta.url))
   const daemonEntry = path.resolve(here, '../../daemon/src/main.ts')

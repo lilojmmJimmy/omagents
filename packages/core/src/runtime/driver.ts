@@ -61,7 +61,9 @@ export interface TurnInput {
   historyMessages: RoomMessage[]
   abortSignal: AbortSignal
   emit: (event: TurnStreamEvent) => void
-  onSessionUpdate: (patch: Partial<Pick<SessionRecord, 'daemonSessionId' | 'nativeSessionId' | 'configHash' | 'lastConsumedOffset'>>) => void
+  onSessionUpdate: (
+    patch: Partial<Pick<SessionRecord, 'daemonSessionId' | 'nativeSessionId' | 'configHash' | 'lastConsumedOffset'>>
+  ) => void
 }
 
 export interface TurnOutput {

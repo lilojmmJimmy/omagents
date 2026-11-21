@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react'
+import type { FileEntry, GitDiffFile, GitStatusInfo, RoomMember, TerminalSession, WorkNode } from '@myagents/protocol'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal as XTerm } from '@xterm/xterm'
 import {
@@ -20,7 +20,7 @@ import {
   Upload,
   X
 } from 'lucide-react'
-import type { FileEntry, GitDiffFile, GitStatusInfo, RoomMember, TerminalSession, WorkNode } from '@myagents/protocol'
+import { type ReactElement, useEffect, useRef, useState } from 'react'
 import { apiUploadWorkspaceFile, rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -345,11 +345,16 @@ function TasksPane() {
             <span>Shared Room Memory ({memories.length})</span>
           </div>
           {memories.length === 0 ? (
-            <div className="text-[11px] text-[#999]">Agents can persist cross-turn shared memory via collab_remember</div>
+            <div className="text-[11px] text-[#999]">
+              Agents can persist cross-turn shared memory via collab_remember
+            </div>
           ) : (
             <ul className="space-y-1">
               {memories.map((mem) => (
-                <li key={mem.id} className="text-[11px] text-[#444] bg-[#fafafa] border border-[#eaeaea] rounded px-2 py-1">
+                <li
+                  key={mem.id}
+                  className="text-[11px] text-[#444] bg-[#fafafa] border border-[#eaeaea] rounded px-2 py-1"
+                >
                   {mem.text}
                 </li>
               ))}
@@ -372,7 +377,12 @@ export function WorkspaceDock() {
   const workspaceId = workspace?.id
 
   const [entries, setEntries] = useState<FileEntry[]>([])
-  const [selectedFile, setSelectedFile] = useState<{ path: string; content: string; mtimeMs: number; binary: boolean } | null>(null)
+  const [selectedFile, setSelectedFile] = useState<{
+    path: string
+    content: string
+    mtimeMs: number
+    binary: boolean
+  } | null>(null)
   const [dirty, setDirty] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
@@ -484,12 +494,14 @@ export function WorkspaceDock() {
       {/* Dock Tabs */}
       <div className="h-12 px-3 border-b border-[#ececec] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1">
-          {([
-            ['files', 'Files'],
-            ['changes', 'Changes'],
-            ['tasks', 'Tasks'],
-            ['terminal', 'Terminal']
-          ] as const).map(([key, label]) => (
+          {(
+            [
+              ['files', 'Files'],
+              ['changes', 'Changes'],
+              ['tasks', 'Tasks'],
+              ['terminal', 'Terminal']
+            ] as const
+          ).map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -534,16 +546,36 @@ export function WorkspaceDock() {
                   e.target.value = ''
                 }}
               />
-              <button type="button" onClick={() => void createNewFile()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="New file">
+              <button
+                type="button"
+                onClick={() => void createNewFile()}
+                className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer"
+                title="New file"
+              >
                 <FilePlus size={13} />
               </button>
-              <button type="button" onClick={() => void createNewDir()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="New folder">
+              <button
+                type="button"
+                onClick={() => void createNewDir()}
+                className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer"
+                title="New folder"
+              >
                 <FolderPlus size={13} />
               </button>
-              <button type="button" onClick={() => fileUploadRef.current?.click()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="Upload file to workspace">
+              <button
+                type="button"
+                onClick={() => fileUploadRef.current?.click()}
+                className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer"
+                title="Upload file to workspace"
+              >
                 <Upload size={13} />
               </button>
-              <button type="button" onClick={() => void loadFiles()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer" title="Refresh">
+              <button
+                type="button"
+                onClick={() => void loadFiles()}
+                className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer"
+                title="Refresh"
+              >
                 <RefreshCw size={13} />
               </button>
             </div>
@@ -551,7 +583,9 @@ export function WorkspaceDock() {
 
           {/* Tree + Editor split */}
           <div className="flex-1 flex flex-col min-h-0">
-            <div className={`${selectedFile ? 'h-44 border-b border-[#ececec]' : 'flex-1'} overflow-y-auto p-1.5 text-xs`}>
+            <div
+              className={`${selectedFile ? 'h-44 border-b border-[#ececec]' : 'flex-1'} overflow-y-auto p-1.5 text-xs`}
+            >
               {entries.length === 0 ? (
                 <div className="text-[#999] p-3 text-center">Empty directory</div>
               ) : (
@@ -560,12 +594,18 @@ export function WorkspaceDock() {
                     key={entry.path}
                     onClick={() => entry.kind === 'file' && void openFile(entry.path)}
                     className={`group flex items-center justify-between px-2 py-1 rounded cursor-pointer ${
-                      selectedFile?.path === entry.path ? 'bg-[#c2542d]/10 text-[#c2542d]' : 'hover:bg-[#f4f4f4] text-[#222]'
+                      selectedFile?.path === entry.path
+                        ? 'bg-[#c2542d]/10 text-[#c2542d]'
+                        : 'hover:bg-[#f4f4f4] text-[#222]'
                     }`}
                     style={{ paddingLeft: `${8 + (entry.path.split('/').length - 1) * 14}px` }}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      {entry.kind === 'dir' ? <Folder size={13} className="text-[#888] shrink-0" /> : <FileIcon size={13} className="text-[#888] shrink-0" />}
+                      {entry.kind === 'dir' ? (
+                        <Folder size={13} className="text-[#888] shrink-0" />
+                      ) : (
+                        <FileIcon size={13} className="text-[#888] shrink-0" />
+                      )}
                       <span className="truncate font-mono text-[11px]">{entry.name}</span>
                     </div>
                     <div className="hidden group-hover:flex items-center gap-1 shrink-0">
@@ -615,14 +655,20 @@ export function WorkspaceDock() {
                         <span>Save</span>
                       </button>
                     )}
-                    <button type="button" onClick={() => setSelectedFile(null)} className="text-[#777] hover:text-[#111] cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(null)}
+                      className="text-[#777] hover:text-[#111] cursor-pointer"
+                    >
                       <X size={13} />
                     </button>
                   </div>
                 </div>
                 {statusMsg && <div className="px-2.5 py-1 text-[11px] text-[#c2542d] bg-[#c2542d]/5">{statusMsg}</div>}
                 {selectedFile.binary ? (
-                  <div className="flex-1 flex items-center justify-center text-xs text-[#888]">Binary files cannot be edited as text</div>
+                  <div className="flex-1 flex items-center justify-center text-xs text-[#888]">
+                    Binary files cannot be edited as text
+                  </div>
                 ) : (
                   <textarea
                     value={selectedFile.content}
@@ -645,7 +691,11 @@ export function WorkspaceDock() {
               <GitBranch size={13} />
               <span>{gitStatus?.isGit ? gitStatus.branch || 'HEAD' : 'Not a Git repository'}</span>
             </div>
-            <button type="button" onClick={() => void loadGit()} className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer">
+            <button
+              type="button"
+              onClick={() => void loadGit()}
+              className="p-1 hover:bg-[#e8e8e8] rounded cursor-pointer"
+            >
               <RefreshCw size={12} />
             </button>
           </div>

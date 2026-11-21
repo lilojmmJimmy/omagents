@@ -149,8 +149,7 @@ export function computeNextCronRun(expr: string, afterMs: number): number {
     const domMatch = cron.daysOfMonth.has(cursor.getDate())
     const dowMatch = cron.daysOfWeek.has(cursor.getDay())
     // Standard cron treats restricted DOM + DOW as union, and wildcard pairs as intersection.
-    const dayMatches =
-      !cron.domWildcard && !cron.dowWildcard ? domMatch || dowMatch : domMatch && dowMatch
+    const dayMatches = !cron.domWildcard && !cron.dowWildcard ? domMatch || dowMatch : domMatch && dowMatch
     if (!dayMatches) {
       cursor.setDate(cursor.getDate() + 1)
       cursor.setHours(0, 0, 0, 0)

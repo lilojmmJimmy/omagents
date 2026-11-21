@@ -43,7 +43,11 @@ export type Launch = { file: string; args: string[]; env: NodeJS.ProcessEnv }
 
 const pathOf = (platform: NodeJS.Platform) => (platform === 'win32' ? path.win32 : path.posix)
 
-export function envValue(env: NodeJS.ProcessEnv, name: string, platform: NodeJS.Platform = process.platform): string | undefined {
+export function envValue(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  platform: NodeJS.Platform = process.platform
+): string | undefined {
   if (platform !== 'win32') return env[name]
   const lower = name.toLowerCase()
   const key = Object.keys(env).find((each) => each.toLowerCase() === lower && env[each] !== undefined)
@@ -59,7 +63,12 @@ function pathExtensions(env: NodeJS.ProcessEnv): string[] {
     .filter((each) => each.startsWith('.'))
 }
 
-export function resolveCommand(command: string, cwd: string, env: NodeJS.ProcessEnv, host: LaunchHost = nodeLaunchHost): string | null {
+export function resolveCommand(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  host: LaunchHost = nodeLaunchHost
+): string | null {
   const windows = host.platform === 'win32'
   const paths = pathOf(host.platform)
   const extensions = windows ? pathExtensions(env) : []
@@ -80,17 +89,33 @@ export function resolveCommand(command: string, cwd: string, env: NodeJS.Process
   return null
 }
 
-export function commandExists(command: string, cwd: string, env: NodeJS.ProcessEnv, host: LaunchHost = nodeLaunchHost): boolean {
+export function commandExists(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  host: LaunchHost = nodeLaunchHost
+): boolean {
   return resolveCommand(command, cwd, env, host) !== null
 }
 
-export function planLaunch(command: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv, host: LaunchHost = nodeLaunchHost): Launch {
+export function planLaunch(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  host: LaunchHost = nodeLaunchHost
+): Launch {
   const file = resolveCommand(command, cwd, env, host)
   if (!file) throw new Error(`command-not-found: ${command}`)
   return launchFile(file, args, env, host)
 }
 
-export function launchFile(file: string, args: readonly string[], env: NodeJS.ProcessEnv, host: LaunchHost = nodeLaunchHost): Launch {
+export function launchFile(
+  file: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  host: LaunchHost = nodeLaunchHost
+): Launch {
   if (host.platform !== 'win32' || !/\.(cmd|bat)$/i.test(file)) return { file, args: [...args], env }
   const launch = resolveWindowsShim(file, args, env, host)
   if (!launch) throw new Error(`command-needs-shell: ${file}`)
@@ -169,7 +194,12 @@ function powershell(env: NodeJS.ProcessEnv, host: LaunchHost): string | null {
   return host.isFile(system) ? system : null
 }
 
-function resolveWindowsShim(file: string, args: readonly string[], env: NodeJS.ProcessEnv, host: LaunchHost): Launch | null {
+function resolveWindowsShim(
+  file: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  host: LaunchHost
+): Launch | null {
   const dir = path.win32.dirname(file)
   const contents = host.read(file)
   const shim = contents === null ? null : parseWindowsShim(contents)

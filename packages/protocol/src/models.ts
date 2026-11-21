@@ -66,14 +66,16 @@ export const WorkspaceSchema = z.object({
 })
 export type Workspace = z.infer<typeof WorkspaceSchema>
 
-export const AgentDriverConfigSchema = z.object({
-  model: z.string().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxSteps: z.number().int().min(1).max(100).optional(),
-  cliPath: z.string().optional(),
-  effort: z.string().optional(),
-  dialect: z.string().optional()
-}).passthrough()
+export const AgentDriverConfigSchema = z
+  .object({
+    model: z.string().optional(),
+    temperature: z.number().min(0).max(2).optional(),
+    maxSteps: z.number().int().min(1).max(100).optional(),
+    cliPath: z.string().optional(),
+    effort: z.string().optional(),
+    dialect: z.string().optional()
+  })
+  .passthrough()
 export type AgentDriverConfig = z.infer<typeof AgentDriverConfigSchema>
 
 export const AgentSchema = z.object({
@@ -140,7 +142,8 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'builtin',
     label: 'Builtin Lightweight Agent',
-    description: 'In-process lightweight ReAct agent connecting directly to OpenAI-compatible model providers with workspace file and command tools.',
+    description:
+      'In-process lightweight ReAct agent connecting directly to OpenAI-compatible model providers with workspace file and command tools.',
     requiresProvider: true,
     requiresExternalCli: false,
     enabledInV1: true,
@@ -155,7 +158,8 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'claude',
     label: 'Claude Code CLI',
-    description: 'Managed local Claude Code CLI (stream-json) supporting long-running coding sessions, native resume, and hot-restart handoff.',
+    description:
+      'Managed local Claude Code CLI (stream-json) supporting long-running coding sessions, native resume, and hot-restart handoff.',
     requiresProvider: false,
     requiresExternalCli: true,
     enabledInV1: true,
@@ -170,7 +174,8 @@ export const AGENT_DESCRIPTORS: readonly AgentDescriptor[] = [
   {
     kind: 'codex',
     label: 'Codex CLI',
-    description: 'Managed local Codex CLI (codex exec --json) supporting sandbox controls, native resume, dynamic MCP, and NDJSON event streaming.',
+    description:
+      'Managed local Codex CLI (codex exec --json) supporting sandbox controls, native resume, dynamic MCP, and NDJSON event streaming.',
     requiresProvider: false,
     requiresExternalCli: true,
     enabledInV1: true,

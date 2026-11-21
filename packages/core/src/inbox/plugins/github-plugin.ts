@@ -3,16 +3,18 @@ import type { InboundEnvelope, PluginContext, SourcePlugin } from '@myagents/plu
 import { z } from 'zod'
 import { Errors } from '../../errors'
 
-export const GitHubPluginConfigSchema = z.object({
-  webhookSecret: z.string().optional(),
-  repository: z.string().trim().optional(),
-  token: z.string().optional(),
-  apiBaseUrl: z.string().trim().url().default('https://api.github.com'),
-  labels: z.string().trim().optional(),
-  includePullRequests: z.boolean().default(true),
-  maxFetchPerSync: z.coerce.number().int().min(1).max(100).default(20),
-  autoReplyOnResolve: z.boolean().default(true)
-}).passthrough()
+export const GitHubPluginConfigSchema = z
+  .object({
+    webhookSecret: z.string().optional(),
+    repository: z.string().trim().optional(),
+    token: z.string().optional(),
+    apiBaseUrl: z.string().trim().url().default('https://api.github.com'),
+    labels: z.string().trim().optional(),
+    includePullRequests: z.boolean().default(true),
+    maxFetchPerSync: z.coerce.number().int().min(1).max(100).default(20),
+    autoReplyOnResolve: z.boolean().default(true)
+  })
+  .passthrough()
 
 export type GitHubPluginConfig = z.infer<typeof GitHubPluginConfigSchema>
 
@@ -61,11 +63,14 @@ export function createGitHubPlugin(fetchImpl: typeof fetch = fetch): SourcePlugi
 
       const event = String(req.headers['x-github-event'] || payload.event || 'issue')
       const action = typeof payload.action === 'string' ? payload.action : 'opened'
-      const repo = ((payload.repository as Record<string, unknown> | undefined)?.full_name as string | undefined) || 'unknown/repo'
+      const repo =
+        ((payload.repository as Record<string, unknown> | undefined)?.full_name as string | undefined) || 'unknown/repo'
       const sender = ((payload.sender as Record<string, unknown> | undefined)?.login as string | undefined) || 'github'
       const issue = (payload.issue ?? payload.pull_request) as Record<string, unknown> | undefined
       const comment = payload.comment as Record<string, unknown> | undefined
-      const deliveryId = String(req.headers['x-github-delivery'] || `${event}:${repo}:${issue?.number ?? Date.now()}:${action}`)
+      const deliveryId = String(
+        req.headers['x-github-delivery'] || `${event}:${repo}:${issue?.number ?? Date.now()}:${action}`
+      )
 
       const title = comment
         ? `[GitHub ${repo}#${issue?.number ?? '?'}] New comment by @${sender}`
@@ -81,7 +86,9 @@ export function createGitHubPlugin(fetchImpl: typeof fetch = fetch): SourcePlugi
             : undefined
 
       const labels = Array.isArray(issue?.labels)
-        ? issue!.labels.map((l) => (typeof l === 'object' && l && 'name' in l ? String((l as { name: unknown }).name) : String(l)))
+        ? issue!.labels.map((l) =>
+            typeof l === 'object' && l && 'name' in l ? String((l as { name: unknown }).name) : String(l)
+          )
         : []
 
       const issueNumber = typeof issue?.number === 'number' ? issue.number : undefined
@@ -195,7 +202,8 @@ export function createGitHubPlugin(fetchImpl: typeof fetch = fetch): SourcePlugi
       }
 
       const apiBase = cfg.apiBaseUrl.replace(/\/+$/, '')
-      let endpoint = typeof target.commentsUrl === 'string' && /^https?:\/\//i.test(target.commentsUrl) ? target.commentsUrl : ''
+      let endpoint =
+        typeof target.commentsUrl === 'string' && /^https?:\/\//i.test(target.commentsUrl) ? target.commentsUrl : ''
       if (!endpoint && typeof target.issueUrl === 'string' && /^https?:\/\//i.test(target.issueUrl)) {
         endpoint = `${target.issueUrl.replace(/\/+$/, '')}/comments`
       }

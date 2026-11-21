@@ -15,7 +15,9 @@ async function runGit(cwd: string, args: string[], timeoutMs = 15_000): Promise<
   return stdout
 }
 
-export async function probeGitRepo(dir: string): Promise<{ isGit: boolean; gitCommonDir: string | null; branch: string | null; head: string | null }> {
+export async function probeGitRepo(
+  dir: string
+): Promise<{ isGit: boolean; gitCommonDir: string | null; branch: string | null; head: string | null }> {
   try {
     const topLevel = path.resolve((await runGit(dir, ['rev-parse', '--show-toplevel'])).trim())
     // Guard against stray .git placed at filesystem/drive root (e.g. C:\.git)
@@ -75,9 +77,7 @@ export class GitService {
 
     const results: GitDiffFile[] = []
     const statusInfo = await this.status(rootPath)
-    const targets = filePath
-      ? statusInfo.files.filter((f) => f.path === filePath)
-      : statusInfo.files
+    const targets = filePath ? statusInfo.files.filter((f) => f.path === filePath) : statusInfo.files
 
     for (const item of targets.slice(0, 100)) {
       if (item.status === '??') {
@@ -99,9 +99,7 @@ export class GitService {
         continue
       }
 
-      const args = baseCommit
-        ? ['diff', baseCommit, '--', item.path]
-        : ['diff', 'HEAD', '--', item.path]
+      const args = baseCommit ? ['diff', baseCommit, '--', item.path] : ['diff', 'HEAD', '--', item.path]
       let patch = ''
       try {
         patch = await runGit(rootPath, args)

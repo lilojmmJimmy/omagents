@@ -20,7 +20,7 @@ import { AuthService } from './security/auth-service'
 import { BasicRedactor, DefaultSecretProvider, NoopApprovalGate } from './security/hooks'
 import { BlobService } from './storage/blob-service'
 import { CoreDatabase } from './storage/database'
-import { createCoreHttpServer, type CoreHttpServer } from './transport/http-server'
+import { type CoreHttpServer, createCoreHttpServer } from './transport/http-server'
 import { RpcRouter } from './transport/rpc-router'
 import { GitService } from './workspace/git-service'
 import { TerminalService } from './workspace/terminal-service'
@@ -173,7 +173,9 @@ export async function startCoreServer(opts: CoreRuntimeOptions = {}) {
 
   console.log(`[core] listening on http://${host}:${port} (pid=${process.pid})`)
   if (isNonLoopback && auth.isDefaultPassword()) {
-    console.warn('[core] WARNING: Listening on non-loopback address with default admin/admin password! Please change it in Settings.')
+    console.warn(
+      '[core] WARNING: Listening on non-loopback address with default admin/admin password! Please change it in Settings.'
+    )
   }
 
   return {

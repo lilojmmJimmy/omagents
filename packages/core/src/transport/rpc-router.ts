@@ -4,18 +4,18 @@ import {
   AgentUpdateInput,
   BackgroundJobEnqueueInput,
   InboxStatus,
+  type JsonRpcError,
+  type JsonRpcRequest,
+  type JsonRpcSuccess,
   McpServerSaveInput,
   ModelProviderSaveInput,
   PROTOCOL_VERSION,
-  RPC_ERROR_CODES,
   RoutingRuleSaveInput,
+  RPC_ERROR_CODES,
   ScheduledJobSaveInput,
   SkillInstallInput,
   UsageAnalyticsQuerySchema,
-  WorkNodeControlAction,
-  type JsonRpcError,
-  type JsonRpcRequest,
-  type JsonRpcSuccess
+  WorkNodeControlAction
 } from '@myagents/protocol'
 import { z } from 'zod'
 import type { UsageAnalyticsService } from '../analytics/usage-service'
@@ -169,25 +169,26 @@ export class RpcRouter {
         return this.deps.workspaces.list(typeof p.kind === 'string' ? (p.kind as any) : undefined)
       case 'workspaces.registerProject':
         return await this.deps.workspaces.registerProject(
-          z.object({
-            name: z.string().optional(),
-            rootPath: z.string().min(1),
-            readonlyRefPaths: z.array(z.string()).optional()
-          }).parse(p)
+          z
+            .object({
+              name: z.string().optional(),
+              rootPath: z.string().min(1),
+              readonlyRefPaths: z.array(z.string()).optional()
+            })
+            .parse(p)
         )
       case 'workspaces.createWorktree':
         return await this.deps.workspaces.createWorktree(
-          z.object({
-            projectWorkspaceId: z.string().min(1),
-            baseRef: z.string().optional(),
-            branchSlug: z.string().optional()
-          }).parse(p)
+          z
+            .object({
+              projectWorkspaceId: z.string().min(1),
+              baseRef: z.string().optional(),
+              branchSlug: z.string().optional()
+            })
+            .parse(p)
         )
       case 'workspaces.cleanWorktree':
-        return await this.deps.workspaces.cleanWorktree(
-          z.string().min(1).parse(p.workspaceId),
-          Boolean(p.force)
-        )
+        return await this.deps.workspaces.cleanWorktree(z.string().min(1).parse(p.workspaceId), Boolean(p.force))
       case 'files.tree':
         return this.deps.workspaces.listTree(
           z.string().min(1).parse(p.workspaceId),
@@ -195,10 +196,7 @@ export class RpcRouter {
           typeof p.depth === 'number' ? Math.min(4, Math.max(1, p.depth)) : 1
         )
       case 'files.read':
-        return this.deps.workspaces.readFile(
-          z.string().min(1).parse(p.workspaceId),
-          z.string().min(1).parse(p.path)
-        )
+        return this.deps.workspaces.readFile(z.string().min(1).parse(p.workspaceId), z.string().min(1).parse(p.path))
       case 'files.write':
         return this.deps.workspaces.writeFile(
           z.string().min(1).parse(p.workspaceId),
@@ -207,10 +205,7 @@ export class RpcRouter {
           typeof p.expectedMtimeMs === 'number' ? p.expectedMtimeMs : undefined
         )
       case 'files.mkdir':
-        return this.deps.workspaces.mkdir(
-          z.string().min(1).parse(p.workspaceId),
-          z.string().min(1).parse(p.path)
-        )
+        return this.deps.workspaces.mkdir(z.string().min(1).parse(p.workspaceId), z.string().min(1).parse(p.path))
       case 'files.rename':
         return this.deps.workspaces.rename(
           z.string().min(1).parse(p.workspaceId),
@@ -218,10 +213,7 @@ export class RpcRouter {
           z.string().min(1).parse(p.newPath)
         )
       case 'files.remove':
-        return this.deps.workspaces.remove(
-          z.string().min(1).parse(p.workspaceId),
-          z.string().min(1).parse(p.path)
-        )
+        return this.deps.workspaces.remove(z.string().min(1).parse(p.workspaceId), z.string().min(1).parse(p.path))
       case 'files.search':
         return this.deps.workspaces.grep(
           z.string().min(1).parse(p.workspaceId),
@@ -249,11 +241,13 @@ export class RpcRouter {
       case 'terminal.list':
         return this.deps.terminals.list(typeof p.workspaceId === 'string' ? p.workspaceId : undefined)
       case 'terminal.open': {
-        const parsed = z.object({
-          workspaceId: z.string().min(1),
-          cols: z.number().int().min(20).max(500).default(100),
-          rows: z.number().int().min(5).max(200).default(30)
-        }).parse(p)
+        const parsed = z
+          .object({
+            workspaceId: z.string().min(1),
+            cols: z.number().int().min(20).max(500).default(100),
+            rows: z.number().int().min(5).max(200).default(30)
+          })
+          .parse(p)
         const session = await this.deps.terminals.open(parsed.workspaceId, parsed.cols, parsed.rows)
         return { ...session, wsPath: `/ws/terminal/${session.id}` }
       }
@@ -269,36 +263,46 @@ export class RpcRouter {
       case 'rooms.get':
         return this.deps.collab.getRoom(z.string().min(1).parse(p.id))
       case 'rooms.create': {
-        const parsed = z.object({
-          title: z.string().optional(),
-          purpose: z.string().optional(),
-          strategyId: z.string().default('single'),
-          strategyConfig: z.record(z.unknown()).optional(),
-          primaryWorkspaceId: z.string().nullable().optional(),
-          members: z.array(z.object({
-            agentId: z.string().min(1),
-            displayName: z.string().optional(),
-            roleKind: z.enum(['lead', 'chair', 'member']).optional(),
-            rolePrompt: z.string().optional()
-          })).min(1),
-          initialPrompt: z.string().optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            title: z.string().optional(),
+            purpose: z.string().optional(),
+            strategyId: z.string().default('single'),
+            strategyConfig: z.record(z.unknown()).optional(),
+            primaryWorkspaceId: z.string().nullable().optional(),
+            members: z
+              .array(
+                z.object({
+                  agentId: z.string().min(1),
+                  displayName: z.string().optional(),
+                  roleKind: z.enum(['lead', 'chair', 'member']).optional(),
+                  rolePrompt: z.string().optional()
+                })
+              )
+              .min(1),
+            initialPrompt: z.string().optional()
+          })
+          .parse(p)
         return await this.deps.collab.createRoom(parsed)
       }
       case 'rooms.update': {
-        const parsed = z.object({
-          id: z.string().min(1),
-          title: z.string().optional(),
-          strategyConfig: z.record(z.unknown()).optional(),
-          sharedMemories: z.array(
-            z.object({
-              id: z.string(),
-              text: z.string(),
-              authorId: z.string(),
-              updatedAt: z.number()
-            })
-          ).optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            id: z.string().min(1),
+            title: z.string().optional(),
+            strategyConfig: z.record(z.unknown()).optional(),
+            sharedMemories: z
+              .array(
+                z.object({
+                  id: z.string(),
+                  text: z.string(),
+                  authorId: z.string(),
+                  updatedAt: z.number()
+                })
+              )
+              .optional()
+          })
+          .parse(p)
         return await this.deps.collab.updateRoom(parsed.id, {
           title: parsed.title,
           strategyConfig: parsed.strategyConfig,
@@ -306,27 +310,35 @@ export class RpcRouter {
         })
       }
       case 'rooms.control': {
-        const parsed = z.object({
-          roomId: z.string().min(1),
-          action: z.enum(['pause', 'resume', 'stop', 'next_round', 'summarize_now'])
-        }).parse(p)
+        const parsed = z
+          .object({
+            roomId: z.string().min(1),
+            action: z.enum(['pause', 'resume', 'stop', 'next_round', 'summarize_now'])
+          })
+          .parse(p)
         return await this.deps.collab.controlRoom(parsed.roomId, parsed.action)
       }
       case 'rooms.handoff': {
-        const parsed = z.object({
-          sourceRoomId: z.string().min(1),
-          sourceMsgId: z.string().optional(),
-          targetStrategyId: z.string().default('open-channel'),
-          title: z.string().optional(),
-          workspaceId: z.string().nullable().optional(),
-          seedText: z.string().optional(),
-          members: z.array(z.object({
-            agentId: z.string().min(1),
-            displayName: z.string().optional(),
-            roleKind: z.enum(['lead', 'chair', 'member']).optional(),
-            rolePrompt: z.string().optional()
-          })).min(1)
-        }).parse(p)
+        const parsed = z
+          .object({
+            sourceRoomId: z.string().min(1),
+            sourceMsgId: z.string().optional(),
+            targetStrategyId: z.string().default('open-channel'),
+            title: z.string().optional(),
+            workspaceId: z.string().nullable().optional(),
+            seedText: z.string().optional(),
+            members: z
+              .array(
+                z.object({
+                  agentId: z.string().min(1),
+                  displayName: z.string().optional(),
+                  roleKind: z.enum(['lead', 'chair', 'member']).optional(),
+                  rolePrompt: z.string().optional()
+                })
+              )
+              .min(1)
+          })
+          .parse(p)
         return await this.deps.collab.handoffRoom(parsed)
       }
       case 'rooms.delete':
@@ -339,13 +351,15 @@ export class RpcRouter {
           typeof p.limit === 'number' ? p.limit : 80
         )
       case 'rooms.sendMessage': {
-        const parsed = z.object({
-          roomId: z.string().min(1),
-          content: z.string().default(''),
-          attachmentFileIds: z.array(z.string().min(1)).max(10).optional(),
-          replyToMsgId: z.string().optional(),
-          idempotencyKey: z.string().min(1)
-        }).parse(p)
+        const parsed = z
+          .object({
+            roomId: z.string().min(1),
+            content: z.string().default(''),
+            attachmentFileIds: z.array(z.string().min(1)).max(10).optional(),
+            replyToMsgId: z.string().optional(),
+            idempotencyKey: z.string().min(1)
+          })
+          .parse(p)
         const fileIds = parsed.attachmentFileIds ?? []
         if (!parsed.content.trim() && fileIds.length === 0) {
           throw Errors.invalidParams('Message content or attachment is required')
@@ -375,12 +389,14 @@ export class RpcRouter {
           typeof p.attempt === 'number' ? p.attempt : undefined
         )
       case 'workNodes.control': {
-        const parsed = z.object({
-          nodeId: z.string().min(1),
-          action: WorkNodeControlAction,
-          targetMemberId: z.string().optional(),
-          note: z.string().optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            nodeId: z.string().min(1),
+            action: WorkNodeControlAction,
+            targetMemberId: z.string().optional(),
+            note: z.string().optional()
+          })
+          .parse(p)
         return await this.deps.collab.controlWorkNode(parsed.nodeId, parsed.action, parsed.note, parsed.targetMemberId)
       }
 
@@ -422,37 +438,43 @@ export class RpcRouter {
       }
       case 'inbox.createManual': {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
-        const parsed = z.object({
-          title: z.string().trim().min(1).max(300),
-          content: z.string().trim().min(1),
-          authorName: z.string().optional(),
-          source: z.string().optional(),
-          externalUrl: z.string().optional(),
-          attachmentFileIds: z.array(z.string().min(1)).max(10).optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            title: z.string().trim().min(1).max(300),
+            content: z.string().trim().min(1),
+            authorName: z.string().optional(),
+            source: z.string().optional(),
+            externalUrl: z.string().optional(),
+            attachmentFileIds: z.array(z.string().min(1)).max(10).optional()
+          })
+          .parse(p)
         return await this.deps.inbox.createManual(parsed)
       }
       case 'inbox.assign': {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
-        const parsed = z.object({
-          itemId: z.string().min(1),
-          mode: z.enum(['create_room', 'append_room']).default('create_room'),
-          roomId: z.string().optional(),
-          strategyId: z.string().optional(),
-          agentIds: z.array(z.string()).optional(),
-          workspaceId: z.string().optional(),
-          allowWrite: z.boolean().optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            itemId: z.string().min(1),
+            mode: z.enum(['create_room', 'append_room']).default('create_room'),
+            roomId: z.string().optional(),
+            strategyId: z.string().optional(),
+            agentIds: z.array(z.string()).optional(),
+            workspaceId: z.string().optional(),
+            allowWrite: z.boolean().optional()
+          })
+          .parse(p)
         return await this.deps.inbox.assignItem(parsed)
       }
       case 'inbox.setStatus': {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
-        const parsed = z.object({
-          itemId: z.string().min(1),
-          status: InboxStatus,
-          sendReply: z.boolean().optional(),
-          replyText: z.string().optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            itemId: z.string().min(1),
+            status: InboxStatus,
+            sendReply: z.boolean().optional(),
+            replyText: z.string().optional()
+          })
+          .parse(p)
         return await this.deps.inbox.setStatus(parsed.itemId, parsed.status, {
           sendReply: parsed.sendReply,
           replyText: parsed.replyText
@@ -465,10 +487,12 @@ export class RpcRouter {
       }
       case 'inbox.reply': {
         if (!this.deps.inbox) throw Errors.notFound('Inbox service not configured')
-        const parsed = z.object({
-          itemId: z.string().min(1),
-          text: z.string().optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            itemId: z.string().min(1),
+            text: z.string().optional()
+          })
+          .parse(p)
         return await this.deps.inbox.replyToItem(parsed.itemId, parsed.text)
       }
       case 'plugins.list': {
@@ -480,13 +504,15 @@ export class RpcRouter {
       }
       case 'plugins.configure': {
         if (!this.deps.plugins) throw Errors.notFound('Plugin manager not configured')
-        const parsed = z.object({
-          id: z.string().optional(),
-          pluginId: z.string().min(1),
-          name: z.string().trim().min(1),
-          config: z.record(z.unknown()).optional(),
-          enabled: z.boolean().optional()
-        }).parse(p)
+        const parsed = z
+          .object({
+            id: z.string().optional(),
+            pluginId: z.string().min(1),
+            name: z.string().trim().min(1),
+            config: z.record(z.unknown()).optional(),
+            enabled: z.boolean().optional()
+          })
+          .parse(p)
         return this.deps.plugins.configureInstance(parsed)
       }
       case 'plugins.delete': {

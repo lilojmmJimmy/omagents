@@ -1,5 +1,5 @@
-import { z } from 'zod'
 import type { CollabStrategy, EngineAction, RoomMessage, RoomSnapshot, WorkNode } from '@myagents/protocol'
+import { z } from 'zod'
 
 const SingleConfigSchema = z.object({}).passthrough()
 type SingleConfig = z.infer<typeof SingleConfigSchema>
@@ -8,7 +8,8 @@ type SingleState = { turnCount: number }
 export const singleStrategy: CollabStrategy<SingleConfig, SingleState> = {
   id: 'single',
   label: '1v1 Direct Chat',
-  description: 'Single agent conducting persistent multi-turn conversations in a bound workspace with streaming output and file tools.',
+  description:
+    'Single agent conducting persistent multi-turn conversations in a bound workspace with streaming output and file tools.',
   executionModel: 'event-driven',
   configSchema: SingleConfigSchema,
   allowedTools: [],

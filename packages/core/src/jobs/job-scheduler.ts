@@ -166,9 +166,9 @@ export class JobSchedulerService {
   }
 
   getJob(id: string): BackgroundJob {
-    const row = this.database.db
-      .prepare('SELECT * FROM background_jobs WHERE id = ?')
-      .get(id) as unknown as JobRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM background_jobs WHERE id = ?').get(id) as unknown as
+      | JobRow
+      | undefined
     if (!row) throw Errors.notFound(`Background job not found: ${id}`)
     return mapJob(row)
   }
@@ -227,9 +227,9 @@ export class JobSchedulerService {
   }
 
   getSchedule(id: string): ScheduledJob {
-    const row = this.database.db
-      .prepare('SELECT * FROM scheduled_jobs WHERE id = ?')
-      .get(id) as unknown as ScheduleRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM scheduled_jobs WHERE id = ?').get(id) as unknown as
+      | ScheduleRow
+      | undefined
     if (!row) throw Errors.notFound(`Scheduled job not found: ${id}`)
     return mapSchedule(row)
   }
@@ -266,9 +266,7 @@ export class JobSchedulerService {
       return this.getSchedule(input.id)
     }
 
-    const dup = this.database.db
-      .prepare('SELECT id FROM scheduled_jobs WHERE LOWER(name) = LOWER(?)')
-      .get(input.name)
+    const dup = this.database.db.prepare('SELECT id FROM scheduled_jobs WHERE LOWER(name) = LOWER(?)').get(input.name)
     if (dup) throw Errors.conflict('name_taken', `Schedule name already exists: ${input.name}`)
 
     const id = randomUUID()
@@ -396,7 +394,7 @@ export class JobSchedulerService {
       const errMsg = (err instanceof Error ? err.message : String(err)).slice(0, 1000)
       if (job.retryCount < this.maxRetries) {
         const nextRetry = job.retryCount + 1
-        const nextRunAfter = now + this.baseBackoffMs * Math.pow(2, job.retryCount)
+        const nextRunAfter = now + this.baseBackoffMs * 2 ** job.retryCount
         this.database.db
           .prepare(
             "UPDATE background_jobs SET status = 'pending', retry_count = ?, run_after = ?, error_text = ?, updated_at = ? WHERE id = ?"

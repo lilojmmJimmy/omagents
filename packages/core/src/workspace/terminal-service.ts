@@ -98,7 +98,9 @@ export class TerminalService {
   }
 
   get(id: string): TerminalSession {
-    const row = this.database.db.prepare('SELECT * FROM terminal_sessions WHERE id = ?').get(id) as unknown as TerminalRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM terminal_sessions WHERE id = ?').get(id) as unknown as
+      | TerminalRow
+      | undefined
     if (!row) throw Errors.notFound(`Terminal session not found: ${id}`)
     return mapTerminal(row)
   }
@@ -140,7 +142,11 @@ export class TerminalService {
 
   async resize(terminalId: string, cols: number, rows: number): Promise<void> {
     const t = this.get(terminalId)
-    await this.daemon.call('resize', { sessionId: t.daemonSessionId, cols: Math.max(20, cols), rows: Math.max(5, rows) })
+    await this.daemon.call('resize', {
+      sessionId: t.daemonSessionId,
+      cols: Math.max(20, cols),
+      rows: Math.max(5, rows)
+    })
   }
 
   async close(terminalId: string): Promise<void> {

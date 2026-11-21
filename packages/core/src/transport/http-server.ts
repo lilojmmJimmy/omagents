@@ -5,11 +5,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fastifyMultipart from '@fastify/multipart'
 import fastifyStatic from '@fastify/static'
-import { JsonRpcRequestSchema, RPC_ERROR_CODES, type JsonRpcNotification } from '@myagents/protocol'
+import { type JsonRpcNotification, JsonRpcRequestSchema, RPC_ERROR_CODES } from '@myagents/protocol'
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
-import { WebSocketServer, type RawData, type WebSocket } from 'ws'
+import { type RawData, type WebSocket, WebSocketServer } from 'ws'
 import { AppError } from '../errors'
-import { parseCookieHeader, SESSION_COOKIE_NAME, type AuthService } from '../security/auth-service'
+import { type AuthService, parseCookieHeader, SESSION_COOKIE_NAME } from '../security/auth-service'
 import type { BlobService } from '../storage/blob-service'
 import { resolveContainedPath } from '../workspace/path-guard'
 import type { TerminalService } from '../workspace/terminal-service'
@@ -275,7 +275,11 @@ export async function createCoreHttpServer(deps: HttpServerDeps): Promise<CoreHt
 
       webhookApp.post('/:pluginId/:instanceId', async (req) => {
         if (!deps.onPluginWebhook) {
-          throw new AppError(RPC_ERROR_CODES.METHOD_NOT_FOUND, 'method_not_found', 'Plugin webhook handler not registered')
+          throw new AppError(
+            RPC_ERROR_CODES.METHOD_NOT_FOUND,
+            'method_not_found',
+            'Plugin webhook handler not registered'
+          )
         }
         const { pluginId, instanceId } = req.params as { pluginId: string; instanceId: string }
         const headers = normalizeHeaders(req.headers)

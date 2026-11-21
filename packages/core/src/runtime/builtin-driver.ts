@@ -182,7 +182,8 @@ export class BuiltinDriver implements AgentDriver {
     const model = input.agent.driverConfig.model || provider.defaultModel
     const maxSteps = input.agent.driverConfig.maxSteps ?? 25
     const readOnly = input.isolation.level !== 'standard' || input.workspaceMode === 'read-only'
-    const baseTools = input.isolation.level === 'lockdown' ? [] : readOnly ? READ_TOOLS : [...READ_TOOLS, ...WRITE_TOOLS]
+    const baseTools =
+      input.isolation.level === 'lockdown' ? [] : readOnly ? READ_TOOLS : [...READ_TOOLS, ...WRITE_TOOLS]
     const collabTools: OpenAiToolDef[] =
       input.allowedCollabTools && input.callCollabTool
         ? collabToolsSpec
@@ -245,9 +246,7 @@ export class BuiltinDriver implements AgentDriver {
       const durationMs = Math.max(0, now - startedAt)
       const genMs = firstOutputAt ? Math.max(100, now - firstOutputAt) : durationMs
       const tokensPerSec =
-        totalOutputTokens > 0 && genMs > 0
-          ? Number((totalOutputTokens / (genMs / 1000)).toFixed(1))
-          : undefined
+        totalOutputTokens > 0 && genMs > 0 ? Number((totalOutputTokens / (genMs / 1000)).toFixed(1)) : undefined
       return {
         model,
         inputTokens: totalInputTokens || undefined,
@@ -368,7 +367,11 @@ export class BuiltinDriver implements AgentDriver {
           if (gate.decision !== 'allow') {
             isError = true
             output = `Tool blocked by policy: ${gate.reason || gate.decision}`
-          } else if (tc.name.startsWith('collab_') && input.callCollabTool && input.allowedCollabTools?.includes(tc.name as CollabToolName)) {
+          } else if (
+            tc.name.startsWith('collab_') &&
+            input.callCollabTool &&
+            input.allowedCollabTools?.includes(tc.name as CollabToolName)
+          ) {
             try {
               const res = await input.callCollabTool(tc.name as CollabToolName, parsedArgs, tc.id)
               output = res.output
@@ -409,7 +412,8 @@ export class BuiltinDriver implements AgentDriver {
         if (step === maxSteps - 1) {
           messages.push({
             role: 'user',
-            content: '[System] You have reached the tool step budget. Summarize your findings and final answer now without calling more tools.'
+            content:
+              '[System] You have reached the tool step budget. Summarize your findings and final answer now without calling more tools.'
           })
         }
       }
@@ -445,7 +449,10 @@ export class BuiltinDriver implements AgentDriver {
         const lines = res.content.split(/\r?\n/)
         const start = typeof args.startLine === 'number' ? Math.max(1, args.startLine) : 1
         const end = typeof args.endLine === 'number' ? Math.min(lines.length, args.endLine) : lines.length
-        const slice = lines.slice(start - 1, end).map((l, i) => `${start + i}: ${l}`).join('\n')
+        const slice = lines
+          .slice(start - 1, end)
+          .map((l, i) => `${start + i}: ${l}`)
+          .join('\n')
         return slice.slice(0, 40_000)
       }
       case 'workspace_grep': {
@@ -459,7 +466,9 @@ export class BuiltinDriver implements AgentDriver {
         const p = typeof args.path === 'string' ? args.path : undefined
         const diffs = await this.git.diff(input.workspace.rootPath, p)
         if (diffs.length === 0) return '(no git changes)'
-        return diffs.map((d) => `=== ${d.path} (${d.status}, +${d.additions}/-${d.deletions}) ===\n${d.patch}`).join('\n\n')
+        return diffs
+          .map((d) => `=== ${d.path} (${d.status}, +${d.additions}/-${d.deletions}) ===\n${d.patch}`)
+          .join('\n\n')
       }
       case 'workspace_write': {
         if (readOnly) throw new Error('Workspace is read-only')
@@ -540,14 +549,12 @@ export class BuiltinDriver implements AgentDriver {
 
       signal.addEventListener('abort', onAbort, { once: true })
 
-      this.daemon
-        .call('spawnPipeClean', { sessionId, command, args, cwd, env: {}, closeStdin: true })
-        .catch((err) => {
-          if (settled) return
-          settled = true
-          cleanup()
-          reject(err)
-        })
+      this.daemon.call('spawnPipeClean', { sessionId, command, args, cwd, env: {}, closeStdin: true }).catch((err) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(err)
+      })
     })
   }
 
@@ -747,7 +754,11 @@ export class BuiltinDriver implements AgentDriver {
         }
         if (Array.isArray(delta.tool_calls)) {
           for (const tc of delta.tool_calls) {
-            const cur = toolMap.get(tc.index) ?? { id: tc.id || `call_${tc.index}_${Date.now()}`, name: '', argumentsText: '' }
+            const cur = toolMap.get(tc.index) ?? {
+              id: tc.id || `call_${tc.index}_${Date.now()}`,
+              name: '',
+              argumentsText: ''
+            }
             if (tc.id) cur.id = tc.id
             if (tc.function?.name) cur.name += tc.function.name
             if (tc.function?.arguments) cur.argumentsText += tc.function.arguments

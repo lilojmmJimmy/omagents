@@ -22,9 +22,7 @@ export const COLLAB_TOOLS = [
 ] as const
 export type CollabToolName = (typeof COLLAB_TOOLS)[number]
 
-export type MessageVisibility =
-  | { scope: 'public' }
-  | { scope: 'private'; allowedMemberIds: string[] }
+export type MessageVisibility = { scope: 'public' } | { scope: 'private'; allowedMemberIds: string[] }
 
 export type EngineAction =
   | {

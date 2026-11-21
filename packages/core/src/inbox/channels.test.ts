@@ -2,11 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import type { SourcePlugin } from '@myagents/plugin-sdk'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import type { SourcePlugin } from '@myagents/plugin-sdk'
-import type { DaemonClient } from '../daemon-client'
 import { CollabEngine } from '../collab/collab-engine'
+import type { DaemonClient } from '../daemon-client'
 import { AgentService } from '../runtime/agent-service'
 import type { AgentDriver, TurnOutput } from '../runtime/driver'
 import { AgentEnvironmentIsolator } from '../runtime/environment-isolator'
@@ -200,15 +200,16 @@ describe('T-103 Inbox Routing Workspace + Outbound Replies & T-301 Email / GitHu
     let resolved1 = h.inbox.getItem(item1.id)
     for (let i = 0; i < 60; i++) {
       resolved1 = h.inbox.getItem(item1.id)
-      if (resolved1.status === 'resolved' && (resolved1.rawMeta._reply as { status?: string } | undefined)?.status === 'sent') {
+      if (
+        resolved1.status === 'resolved' &&
+        (resolved1.rawMeta._reply as { status?: string } | undefined)?.status === 'sent'
+      ) {
         break
       }
       await new Promise((r) => setTimeout(r, 25))
     }
     expect(resolved1.status).toBe('resolved')
-    expect(sentReplies).toEqual([
-      { target: { threadId: 'th-100' }, text: 'Checked diagnostics and fixed config.' }
-    ])
+    expect(sentReplies).toEqual([{ target: { threadId: 'th-100' }, text: 'Checked diagnostics and fixed config.' }])
     expect((resolved1.rawMeta._reply as { status: string }).status).toBe('sent')
 
     // Disable auto-routing rule for item2 so manual setStatus / reply failure is tested deterministically
@@ -250,7 +251,7 @@ describe('T-103 Inbox Routing Workspace + Outbound Replies & T-301 Email / GitHu
     })
 
     const sentEmails: Array<{ from: string; to: string; subject: string; text: string; inReplyTo?: string }> = []
-    let uidNextVal = 11
+    const uidNextVal = 11
 
     const emailPlugin = createEmailPlugin({
       createImapClient: (): ImapClientLike => ({

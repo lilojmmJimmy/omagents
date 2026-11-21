@@ -1,5 +1,5 @@
-import type { z } from 'zod'
 import type { CollabStrategy, FileRef } from '@myagents/protocol'
+import type { z } from 'zod'
 
 export interface InboundEnvelope {
   id: string
@@ -38,4 +38,7 @@ export interface SourcePlugin<TConfig = unknown> {
   ): Promise<void>
 }
 
-export type StrategyPlugin<TConfig = Record<string, unknown>, TState = Record<string, unknown>> = CollabStrategy<TConfig, TState>
+export type StrategyPlugin<TConfig = Record<string, unknown>, TState = Record<string, unknown>> = CollabStrategy<
+  TConfig,
+  TState
+>

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { createNdjsonParser, planLaunch } from '@myagents/protocol/node'
 
 export interface ResolvedExternalMcpServer {
@@ -300,7 +300,10 @@ export class McpClient {
     }
   }
 
-  private async sendHttpRequest(frame: { id: number; method: string; params: Record<string, unknown> }, timeoutMs: number): Promise<unknown> {
+  private async sendHttpRequest(
+    frame: { id: number; method: string; params: Record<string, unknown> },
+    timeoutMs: number
+  ): Promise<unknown> {
     const url = this.server.url
     if (!url) throw new Error(`MCP server ${this.server.name} is missing URL`)
 

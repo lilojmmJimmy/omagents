@@ -92,14 +92,7 @@ export class AgentEnvironmentIsolator implements EnvironmentIsolator {
       disallowedTools.push('Agent', 'Task', 'Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash')
       allowedTools.push('mcp__myagents__collab_history', 'mcp__myagents__collab_publish')
     } else if (level === 'fenced-ro') {
-      allowedTools.push(
-        'Read',
-        'Glob',
-        'Grep',
-        'Bash(git log:*)',
-        'Bash(git diff:*)',
-        'Bash(git show:*)'
-      )
+      allowedTools.push('Read', 'Glob', 'Grep', 'Bash(git log:*)', 'Bash(git diff:*)', 'Bash(git show:*)')
       disallowedTools.push('Write', 'Edit', 'MultiEdit', 'NotebookEdit')
       appendNoEditRule(disallowedTools, ctx.workspace.rootPath)
     }

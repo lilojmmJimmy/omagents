@@ -16,12 +16,18 @@ const { values } = parseArgs({
   strict: false
 })
 
-const homeDir = typeof values.home === 'string' && values.home.trim() ? values.home.trim() : process.env.MYAGENTS_HOME || ''
+const homeDir =
+  typeof values.home === 'string' && values.home.trim() ? values.home.trim() : process.env.MYAGENTS_HOME || ''
 const roomId = typeof values.room === 'string' ? values.room.trim() : ''
 const memberId = typeof values.member === 'string' ? values.member.trim() : ''
 const allowedSet =
   typeof values.tools === 'string' && values.tools.trim()
-    ? new Set(values.tools.split(',').map((s) => s.trim()).filter(Boolean))
+    ? new Set(
+        values.tools
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      )
     : null
 
 const toolsPath = fileURLToPath(new URL('./collab-tools.json', import.meta.url))

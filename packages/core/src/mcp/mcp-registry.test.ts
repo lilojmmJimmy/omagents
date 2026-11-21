@@ -2,17 +2,17 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { McpServerSaveInput, type Workspace } from '@myagents/protocol'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { McpServerSaveInput, type Agent, type Workspace } from '@myagents/protocol'
-import { DaemonClient } from '../daemon-client'
-import { BasicRedactor, DefaultSecretProvider, NoopApprovalGate } from '../security/hooks'
-import { CoreDatabase } from '../storage/database'
+import type { DaemonClient } from '../daemon-client'
 import { AgentService } from '../runtime/agent-service'
 import { BuiltinDriver } from '../runtime/builtin-driver'
 import type { TurnInput } from '../runtime/driver'
 import { ProviderService } from '../runtime/provider-service'
-import { WorkspaceService } from '../workspace/workspace-service'
+import { BasicRedactor, DefaultSecretProvider, NoopApprovalGate } from '../security/hooks'
+import { CoreDatabase } from '../storage/database'
 import { GitService } from '../workspace/git-service'
+import { WorkspaceService } from '../workspace/workspace-service'
 import { writeRoomMemberMcpConfig } from './mcp-config'
 import { McpRegistryService } from './mcp-registry'
 
@@ -90,7 +90,11 @@ rl.on('line', (line) => {
             JSON.stringify({
               jsonrpc: '2.0',
               id: msg.id,
-              result: { protocolVersion: '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'http-mcp', version: '1.0.0' } }
+              result: {
+                protocolVersion: '2024-11-05',
+                capabilities: { tools: {} },
+                serverInfo: { name: 'http-mcp', version: '1.0.0' }
+              }
             })
           )
           return
@@ -155,9 +159,7 @@ rl.on('line', (line) => {
             res.end()
             return
           }
-          const finalMsg = toolMsg
-            ? `TOOL_RESULT=${toolMsg.content}`
-            : `TOOLS=${toolNames.join(',')}`
+          const finalMsg = toolMsg ? `TOOL_RESULT=${toolMsg.content}` : `TOOLS=${toolNames.join(',')}`
           res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: finalMsg } }] })}\n\n`)
           res.write('data: [DONE]\n\n')
           res.end()
@@ -190,9 +192,9 @@ describe('McpRegistryService & External MCP Integration', () => {
     const providers = new ProviderService(db, new DefaultSecretProvider())
     const registry = new McpRegistryService(db, new DefaultSecretProvider())
 
-    expect(() =>
-      McpServerSaveInput.parse({ name: 'myagents', transport: 'stdio', command: 'node' })
-    ).toThrow(/reserved/)
+    expect(() => McpServerSaveInput.parse({ name: 'myagents', transport: 'stdio', command: 'node' })).toThrow(
+      /reserved/
+    )
 
     const provider = providers.save({
       name: 'mock-p',
@@ -346,7 +348,14 @@ describe('McpRegistryService & External MCP Integration', () => {
     })
     const ws: Workspace = workspaces.get(agent.defaultWorkspaceId)
     const externalMcpServers = await registry.resolveForAgent(agent.mcpServerIds)
-    const driver = new BuiltinDriver(providers, workspaces, new GitService(), {} as DaemonClient, new NoopApprovalGate(), redactor)
+    const driver = new BuiltinDriver(
+      providers,
+      workspaces,
+      new GitService(),
+      {} as DaemonClient,
+      new NoopApprovalGate(),
+      redactor
+    )
 
     const baseInput: TurnInput = {
       session: {

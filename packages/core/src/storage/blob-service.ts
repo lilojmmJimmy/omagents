@@ -98,7 +98,10 @@ export interface BlobMeta {
 }
 
 function sanitizeFilename(raw: string): string {
-  const base = path.basename(raw || 'attachment.bin').replace(/[\r\n\0/\\]/g, '_').trim()
+  const base = path
+    .basename(raw || 'attachment.bin')
+    .replace(/[\r\n\0/\\]/g, '_')
+    .trim()
   return (base || 'attachment.bin').slice(0, 255)
 }
 
@@ -132,12 +135,7 @@ export class BlobService {
     return dir
   }
 
-  storeBuffer(input: {
-    filename: string
-    mime?: string
-    buffer: Buffer
-    maxBytes?: number
-  }): FileRef {
+  storeBuffer(input: { filename: string; mime?: string; buffer: Buffer; maxBytes?: number }): FileRef {
     const limit = input.maxBytes ?? DEFAULT_MAX_BLOB_BYTES
     if (input.buffer.byteLength > limit) {
       throw Errors.invalidParams(`Attachment exceeds ${Math.round(limit / (1024 * 1024))}MB limit`)
@@ -174,9 +172,9 @@ export class BlobService {
   }
 
   getFileMeta(fileId: string): BlobMeta {
-    const row = this.database.db
-      .prepare('SELECT * FROM files WHERE id = ?')
-      .get(fileId) as unknown as FileRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM files WHERE id = ?').get(fileId) as unknown as
+      | FileRow
+      | undefined
     if (!row) {
       throw Errors.notFound(`Attachment file not found: ${fileId}`)
     }
@@ -221,19 +219,13 @@ export class BlobService {
     return `${text.slice(0, maxChars)}\n... [truncated at ${maxChars} chars]`
   }
 
-  attachRefs(
-    fileIds: readonly string[],
-    ownerType: 'message' | 'inbox' | 'room',
-    ownerId: string
-  ): FileRef[] {
+  attachRefs(fileIds: readonly string[], ownerType: 'message' | 'inbox' | 'room', ownerId: string): FileRef[] {
     const unique = [...new Set(fileIds.map((id) => id.trim()).filter(Boolean))]
     if (unique.length === 0) return []
 
     const refs: FileRef[] = []
     const now = Date.now()
-    const selectStmt = this.database.db.prepare(
-      'SELECT id, sha256, filename, mime, size_bytes FROM files WHERE id = ?'
-    )
+    const selectStmt = this.database.db.prepare('SELECT id, sha256, filename, mime, size_bytes FROM files WHERE id = ?')
     const insertRefStmt = this.database.db.prepare(
       'INSERT OR IGNORE INTO file_refs (file_id, owner_type, owner_id, created_at) VALUES (?, ?, ?, ?)'
     )
@@ -278,9 +270,7 @@ export class BlobService {
          JOIN files f ON f.id = fr.file_id
          WHERE f.sha256 = ?`
       )
-      const existsOutboxStmt = this.database.db.prepare(
-        'SELECT id FROM file_deletion_outbox WHERE sha256 = ? LIMIT 1'
-      )
+      const existsOutboxStmt = this.database.db.prepare('SELECT id FROM file_deletion_outbox WHERE sha256 = ? LIMIT 1')
       const insertOutboxStmt = this.database.db.prepare(
         `INSERT INTO file_deletion_outbox (id, sha256, storage_key, backend_kind, retry_count, created_at)
          VALUES (?, ?, ?, ?, 0, ?)`
@@ -340,9 +330,9 @@ export class BlobService {
       else unreferencedBytes += bytes
     }
 
-    const outboxRow = this.database.db
-      .prepare('SELECT COUNT(*) AS cnt FROM file_deletion_outbox')
-      .get() as { cnt: number }
+    const outboxRow = this.database.db.prepare('SELECT COUNT(*) AS cnt FROM file_deletion_outbox').get() as {
+      cnt: number
+    }
 
     return {
       totalFiles: rows.length,
@@ -374,9 +364,7 @@ export class BlobService {
         candidates.set(r.sha256, r.storage_key)
       }
 
-      const outboxRows = this.database.db
-        .prepare('SELECT * FROM file_deletion_outbox')
-        .all() as unknown as OutboxRow[]
+      const outboxRows = this.database.db.prepare('SELECT * FROM file_deletion_outbox').all() as unknown as OutboxRow[]
       for (const o of outboxRows) {
         candidates.set(o.sha256, o.storage_key)
       }

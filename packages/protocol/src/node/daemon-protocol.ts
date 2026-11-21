@@ -5,9 +5,38 @@ import { z } from 'zod'
 export const DAEMON_PROTOCOL_VERSION = 2
 
 export const CLEAN_ENV_KEYS: readonly string[] = [
-  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TMPDIR', 'TEMP', 'TMP', 'TZ',
-  'SYSTEMROOT', 'SYSTEMDRIVE', 'WINDIR', 'COMSPEC', 'PATHEXT', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'USERNAME',
-  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'ALL_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR'
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TMPDIR',
+  'TEMP',
+  'TMP',
+  'TZ',
+  'SYSTEMROOT',
+  'SYSTEMDRIVE',
+  'WINDIR',
+  'COMSPEC',
+  'PATHEXT',
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'PROGRAMDATA',
+  'PROGRAMFILES',
+  'USERNAME',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR'
 ]
 
 export function cleanEnv(env: NodeJS.ProcessEnv): Record<string, string> {
@@ -107,7 +136,12 @@ export type DaemonParsedParams<M extends DaemonMethod> = z.output<(typeof daemon
 export type DaemonResult<M extends DaemonMethod> = z.infer<(typeof daemonMethods)[M]['result']>
 
 export const DaemonEventSchema = z.discriminatedUnion('event', [
-  z.object({ event: z.literal('data'), sessionId: z.string(), data: z.string(), offset: z.number().int().nonnegative() }),
+  z.object({
+    event: z.literal('data'),
+    sessionId: z.string(),
+    data: z.string(),
+    offset: z.number().int().nonnegative()
+  }),
   z.object({ event: z.literal('stderr'), sessionId: z.string(), data: z.string() }),
   z.object({ event: z.literal('exit'), sessionId: z.string(), exitCode: z.number().int() })
 ])

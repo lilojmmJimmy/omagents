@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
 import { Folder, GitBranch, GitFork, Plus, Trash2 } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
 import { rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -73,7 +73,8 @@ export function WorkspacesView() {
         <div>
           <h1 className="text-base font-semibold text-[#111]">Workspaces</h1>
           <p className="text-xs text-[#666] mt-0.5">
-            Register local directories or Git repositories on the server, and create isolated Git worktree sandboxes for parallel dispatch.
+            Register local directories or Git repositories on the server, and create isolated Git worktree sandboxes for
+            parallel dispatch.
           </p>
         </div>
 
@@ -109,7 +110,10 @@ export function WorkspacesView() {
 
         <div className="space-y-2.5">
           {workspaces.map((w) => (
-            <div key={w.id} className="bg-white border border-[#e5e5e5] rounded-xl p-3.5 flex items-center justify-between gap-4">
+            <div
+              key={w.id}
+              className="bg-white border border-[#e5e5e5] rounded-xl p-3.5 flex items-center justify-between gap-4"
+            >
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Folder size={14} className="text-[#c2542d] shrink-0" />

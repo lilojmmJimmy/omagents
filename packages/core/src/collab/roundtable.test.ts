@@ -1,4 +1,4 @@
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -29,10 +29,10 @@ let failMemberB = false
 // Explicit gate to hold Round 1 of PeerB/Chair until test inspects PeerA's private message state
 let holdRound1Peers = false
 let peerAGateResolved: (() => void) | null = null
-let peerBReleaseGates: Array<() => void> = []
+const peerBReleaseGates: Array<() => void> = []
 
 function parseSeatName(sys: string): string {
-  const m = /You are seated as \*\*@([^\*]+)\*\*/.exec(sys)
+  const m = /You are seated as \*\*@([^*]+)\*\*/.exec(sys)
   return m?.[1]?.trim() || 'Unknown'
 }
 
@@ -65,7 +65,12 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
               return
             }
 
-            if (scenario === 'blind-and-interject' && holdRound1Peers && lastUser.includes('[Round 1 Independent Position]') && seat !== 'PeerA') {
+            if (
+              scenario === 'blind-and-interject' &&
+              holdRound1Peers &&
+              lastUser.includes('[Round 1 Independent Position]') &&
+              seat !== 'PeerA'
+            ) {
               await new Promise<void>((r) => {
                 peerBReleaseGates.push(r)
               })
@@ -76,7 +81,9 @@ function startMockRoundtableLlm(): Promise<{ server: http.Server; port: number }
               res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`)
             }
             const endStream = () => {
-              res.write(`data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { prompt_tokens: 60, completion_tokens: 20 } })}\n\n`)
+              res.write(
+                `data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { prompt_tokens: 60, completion_tokens: 20 } })}\n\n`
+              )
               res.write('data: [DONE]\n\n')
               res.end()
             }
@@ -225,9 +232,7 @@ beforeAll(async () => {
   gitRepoDir = path.join(tmpHome, 'rt-repo')
   process.env.MYAGENTS_HOME = tmpHome
   daemonEndpoint =
-    process.platform === 'win32'
-      ? `\\\\.\\pipe\\myagents-rt-${Date.now()}`
-      : path.join(tmpHome, 'daemon.sock')
+    process.platform === 'win32' ? `\\\\.\\pipe\\myagents-rt-${Date.now()}` : path.join(tmpHome, 'daemon.sock')
 
   execFileSync('git', ['init', gitRepoDir], { windowsHide: true })
   execFileSync('git', ['config', 'user.email', 'test@myagents.local'], { cwd: gitRepoDir, windowsHide: true })
@@ -303,9 +308,21 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
         models: ['mock-rt-1']
       })
 
-      const chair = await rpcCall(ws, 'a1', 'agents.create', { name: 'Chair', driverKind: 'builtin', providerId: provider.id })
-      const peerA = await rpcCall(ws, 'a2', 'agents.create', { name: 'PeerA', driverKind: 'builtin', providerId: provider.id })
-      const peerB = await rpcCall(ws, 'a3', 'agents.create', { name: 'PeerB', driverKind: 'builtin', providerId: provider.id })
+      const chair = await rpcCall(ws, 'a1', 'agents.create', {
+        name: 'Chair',
+        driverKind: 'builtin',
+        providerId: provider.id
+      })
+      const peerA = await rpcCall(ws, 'a2', 'agents.create', {
+        name: 'PeerA',
+        driverKind: 'builtin',
+        providerId: provider.id
+      })
+      const peerB = await rpcCall(ws, 'a3', 'agents.create', {
+        name: 'PeerB',
+        driverKind: 'builtin',
+        providerId: provider.id
+      })
 
       const room = await rpcCall(ws, 'r1', 'rooms.create', {
         title: 'Arch Roundtable',
@@ -368,9 +385,7 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
       const pausedAfterR1 = waitNotification(
         ws,
         (method, params) =>
-          method === 'room.updated' &&
-          params.id === room.id &&
-          params.strategyState?.phase === 'awaiting_next_round'
+          method === 'room.updated' && params.id === room.id && params.strategyState?.phase === 'awaiting_next_round'
       )
       holdRound1Peers = false
       const gates = peerBReleaseGates.splice(0)
@@ -398,8 +413,7 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
       recordedCalls = []
       const donePromise = waitNotification(
         ws,
-        (method, params) =>
-          method === 'room.updated' && params.id === room.id && params.state === 'done'
+        (method, params) => method === 'room.updated' && params.id === room.id && params.state === 'done'
       )
       await rpcCall(ws, 'ctrl1', 'rooms.control', { roomId: room.id, action: 'next_round' })
       await donePromise
@@ -456,9 +470,21 @@ describe('MyAgents v0.1c Pregel Super-step Roundtable Strategy', () => {
         models: ['mock-rt-1']
       })
 
-      const chair = await rpcCall(ws, 'a1', 'agents.create', { name: 'Chair', driverKind: 'builtin', providerId: provider.id })
-      const peerA = await rpcCall(ws, 'a2', 'agents.create', { name: 'PeerA', driverKind: 'builtin', providerId: provider.id })
-      const peerB = await rpcCall(ws, 'a3', 'agents.create', { name: 'PeerB', driverKind: 'builtin', providerId: provider.id })
+      const chair = await rpcCall(ws, 'a1', 'agents.create', {
+        name: 'Chair',
+        driverKind: 'builtin',
+        providerId: provider.id
+      })
+      const peerA = await rpcCall(ws, 'a2', 'agents.create', {
+        name: 'PeerA',
+        driverKind: 'builtin',
+        providerId: provider.id
+      })
+      const peerB = await rpcCall(ws, 'a3', 'agents.create', {
+        name: 'PeerB',
+        driverKind: 'builtin',
+        providerId: provider.id
+      })
 
       const room = await rpcCall(ws, 'r2', 'rooms.create', {
         title: 'Secret Architecture Review',

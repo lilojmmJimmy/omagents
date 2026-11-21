@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import {
+  type FileRef,
+  type NodeEvent,
+  pickLatestRetryableNode,
+  type RoomMember,
+  type RoomMessage,
+  type TurnUsage,
+  type WorkNode
+} from '@myagents/protocol'
 import {
   ArrowRightLeft,
   Brain,
@@ -30,19 +38,11 @@ import {
   X,
   Zap
 } from 'lucide-react'
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import {
-  pickLatestRetryableNode,
-  type FileRef,
-  type NodeEvent,
-  type RoomMember,
-  type RoomMessage,
-  type TurnUsage,
-  type WorkNode
-} from '@myagents/protocol'
 import { apiUploadBlob, blobUrl } from '../api/rpc-client'
-import { useAppStore, type LiveToolStep, type LiveTurnBuffer } from '../store/app-store'
+import { type LiveToolStep, type LiveTurnBuffer, useAppStore } from '../store/app-store'
 
 const SAFE_PREVIEW_IMAGES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
@@ -114,11 +114,12 @@ function extractThinkingText(events: NodeEvent[]): string {
   const parts: string[] = []
   for (const ev of events) {
     if (ev.kind === 'thinking') {
-      const text = typeof ev.payload.text === 'string'
-        ? ev.payload.text
-        : typeof ev.payload.delta === 'string'
-          ? ev.payload.delta
-          : ''
+      const text =
+        typeof ev.payload.text === 'string'
+          ? ev.payload.text
+          : typeof ev.payload.delta === 'string'
+            ? ev.payload.delta
+            : ''
       if (text.trim()) parts.push(text.trim())
     }
   }
@@ -192,7 +193,11 @@ function ThinkingCollapse({
   )
 }
 
-function ToolStepsCollapse({ steps }: { steps: Array<{ id: string; name: string; input?: unknown; output?: string; isError?: boolean; done: boolean }> }) {
+function ToolStepsCollapse({
+  steps
+}: {
+  steps: Array<{ id: string; name: string; input?: unknown; output?: string; isError?: boolean; done: boolean }>
+}) {
   const [open, setOpen] = useState(false)
   if (steps.length === 0) return null
   return (
@@ -282,7 +287,10 @@ function TurnMetricsBar({
       )}
 
       {tps !== undefined && tps > 0 && (
-        <span className="inline-flex items-center gap-1" title={isEstimated ? 'Live estimated output speed' : 'Output token rate'}>
+        <span
+          className="inline-flex items-center gap-1"
+          title={isEstimated ? 'Live estimated output speed' : 'Output token rate'}
+        >
           <Zap size={11} className="text-amber-600/80" />
           <span>{isEstimated ? `~${tps.toFixed(1)}` : tps.toFixed(1)} tok/s</span>
         </span>
@@ -293,14 +301,20 @@ function TurnMetricsBar({
           {usage.inputTokens !== undefined && (
             <>
               <span>In {formatTokens(usage.inputTokens)}</span>
-              {usage.cacheReadTokens ? <span className="text-[#aaa]"> (+{formatTokens(usage.cacheReadTokens)} cached)</span> : null}
+              {usage.cacheReadTokens ? (
+                <span className="text-[#aaa]"> (+{formatTokens(usage.cacheReadTokens)} cached)</span>
+              ) : null}
             </>
           )}
-          {usage.inputTokens !== undefined && usage.outputTokens !== undefined && <span className="mx-1 text-[#ccc]">/</span>}
+          {usage.inputTokens !== undefined && usage.outputTokens !== undefined && (
+            <span className="mx-1 text-[#ccc]">/</span>
+          )}
           {usage.outputTokens !== undefined && (
             <>
               <span>Out {formatTokens(usage.outputTokens)}</span>
-              {usage.thinkingTokens ? <span className="text-[#9a7b5c]"> (Thinking {formatTokens(usage.thinkingTokens)})</span> : null}
+              {usage.thinkingTokens ? (
+                <span className="text-[#9a7b5c]"> (Thinking {formatTokens(usage.thinkingTokens)})</span>
+              ) : null}
             </>
           )}
         </span>
@@ -430,8 +444,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
     const model = latestUsage?.model || primaryAgent?.driverConfig.model || undefined
     const contextUsed = latestUsage?.contextUsedTokens
     const contextWindow = latestUsage?.contextWindow
-    const contextPct =
-      contextUsed && contextWindow ? Math.min(100, (contextUsed / contextWindow) * 100) : null
+    const contextPct = contextUsed && contextWindow ? Math.min(100, (contextUsed / contextWindow) * 100) : null
     const speed = latestUsage?.tokensPerSec ?? liveMetrics?.estimatedTps
     const isEstimatedSpeed = !latestUsage?.tokensPerSec && liveMetrics?.estimatedTps !== undefined
     const displayDurationMs = liveMetrics
@@ -485,7 +498,9 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#666]">
         <p className="text-sm">No active room open</p>
-        <p className="text-xs text-[#999] mt-1">Configure a model provider and agent on the left, then start a new chat</p>
+        <p className="text-xs text-[#999] mt-1">
+          Configure a model provider and agent on the left, then start a new chat
+        </p>
         <button
           type="button"
           onClick={onOpenNewChat}
@@ -593,9 +608,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                     className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-[#f4f4f4] hover:bg-[#c2542d]/10 hover:text-[#c2542d] text-[#444] shrink-0 whitespace-nowrap cursor-pointer"
                   >
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        memRunning ? 'bg-[#c2542d] animate-pulse' : 'bg-[#bbb]'
-                      }`}
+                      className={`w-1.5 h-1.5 rounded-full ${memRunning ? 'bg-[#c2542d] animate-pulse' : 'bg-[#bbb]'}`}
                     />
                     <span>@{mem.displayName}</span>
                     {mem.roleKind === 'chair' && <span className="text-[9px] text-indigo-700 font-medium">Chair</span>}
@@ -652,7 +665,11 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 onClick={() => {
                   const latestSummary = [...messages]
                     .reverse()
-                    .find((msg) => msg.authorKind === 'agent' && (msg.kind === 'summary' || msg.kind === 'result' || msg.kind === 'chat'))
+                    .find(
+                      (msg) =>
+                        msg.authorKind === 'agent' &&
+                        (msg.kind === 'summary' || msg.kind === 'result' || msg.kind === 'chat')
+                    )
                   setHandoffTitle(`${currentRoom.title} - Execution`)
                   setHandoffWorkspaceId(currentRoom.primaryWorkspaceId ?? '')
                   setHandoffSeedText(latestSummary?.content ?? '')
@@ -672,9 +689,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             <>
               <button
                 type="button"
-                onClick={() =>
-                  void controlRoom(currentRoom.id, currentRoom.state === 'paused' ? 'resume' : 'pause')
-                }
+                onClick={() => void controlRoom(currentRoom.id, currentRoom.state === 'paused' ? 'resume' : 'pause')}
                 className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#f2f2f2] cursor-pointer whitespace-nowrap shrink-0"
                 title={currentRoom.state === 'paused' ? 'Resume channel scheduling' : 'Pause channel scheduling'}
               >
@@ -750,16 +765,23 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             )}
 
             {sessionStats.speed !== undefined && sessionStats.speed > 0 && (
-              <span className="inline-flex items-center gap-1" title={sessionStats.isEstimatedSpeed ? 'Live estimated speed' : 'Token output speed'}>
+              <span
+                className="inline-flex items-center gap-1"
+                title={sessionStats.isEstimatedSpeed ? 'Live estimated speed' : 'Token output speed'}
+              >
                 <Gauge size={11} className="text-amber-600/80 shrink-0" />
                 <span>
-                  {sessionStats.isEstimatedSpeed ? `~${sessionStats.speed.toFixed(1)}` : sessionStats.speed.toFixed(1)} tok/s
+                  {sessionStats.isEstimatedSpeed ? `~${sessionStats.speed.toFixed(1)}` : sessionStats.speed.toFixed(1)}{' '}
+                  tok/s
                 </span>
               </span>
             )}
 
             {sessionStats.displayDurationMs !== undefined && (
-              <span className="inline-flex items-center gap-1" title={isRunning ? 'Current turn elapsed time' : 'Last turn duration'}>
+              <span
+                className="inline-flex items-center gap-1"
+                title={isRunning ? 'Current turn elapsed time' : 'Last turn duration'}
+              >
                 <Clock size={11} className="text-[#888] shrink-0" />
                 <span>{formatDuration(sessionStats.displayDurationMs)}</span>
               </span>
@@ -778,10 +800,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
             <div className="flex items-center gap-1 min-w-0 max-w-full">
               <FileText size={11} className="text-[#888] shrink-0" />
               <span className="text-[#888] shrink-0">Session:</span>
-              <span
-                className="text-[#444] truncate max-w-[320px]"
-                title={sessionFilePath}
-              >
+              <span className="text-[#444] truncate max-w-[320px]" title={sessionFilePath}>
                 {sessionFilePath}
               </span>
               <button
@@ -867,9 +886,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                 <div
                   key={m.id}
                   className={`text-xs rounded-lg px-3 py-2 border ${
-                    isNotice
-                      ? 'text-[#555] bg-[#fafafa] border-[#e6e6e6]'
-                      : 'text-red-700 bg-red-50 border-red-200'
+                    isNotice ? 'text-[#555] bg-[#fafafa] border-[#e6e6e6]' : 'text-red-700 bg-red-50 border-red-200'
                   }`}
                 >
                   <span className="text-[10px] font-mono opacity-60 mr-1.5">#m{m.seq}</span>
@@ -1095,11 +1112,7 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
                   <span>{uploading ? 'Uploading...' : 'Attach'}</span>
                 </button>
                 <span className="text-[11px] text-[#999]">
-                  {currentRoom.state === 'paused'
-                    ? 'Paused'
-                    : activeNode
-                      ? `Running (${activeNode.status})`
-                      : 'Ready'}
+                  {currentRoom.state === 'paused' ? 'Paused' : activeNode ? `Running (${activeNode.status})` : 'Ready'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1179,7 +1192,8 @@ export function ChatView({ onOpenNewChat }: { onOpenNewChat: () => void }) {
               </button>
             </div>
             <p className="text-xs text-[#666]">
-              Hand off this roundtable conclusion and shared room memory to a new collaboration room while preserving full discussion traceability.
+              Hand off this roundtable conclusion and shared room memory to a new collaboration room while preserving
+              full discussion traceability.
             </p>
             <div className="space-y-2.5 text-xs">
               <div>

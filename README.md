@@ -85,6 +85,7 @@ Starts `daemon`, `core` (`:3210`), and Vite dev server (`:5173`, proxied to `:32
 ### Verification Commands
 
 ```bash
+pnpm run check
 pnpm run typecheck
 pnpm run build
 pnpm test

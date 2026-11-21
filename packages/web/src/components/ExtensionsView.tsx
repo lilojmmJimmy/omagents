@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import { Activity, BookOpen, Pencil, Plus, Plug, Power, Trash2 } from 'lucide-react'
 import type { McpProbeResult, McpServer, McpTransport, SkillSourceType } from '@myagents/protocol'
+import { Activity, BookOpen, Pencil, Plug, Plus, Power, Trash2 } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
 import { rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -113,7 +113,9 @@ export function ExtensionsView() {
       id: server.id,
       name: server.name,
       transport: server.transport,
-      ...(server.transport === 'stdio' ? { command: server.command ?? '', args: server.args } : { url: server.url ?? '' }),
+      ...(server.transport === 'stdio'
+        ? { command: server.command ?? '', args: server.args }
+        : { url: server.url ?? '' }),
       enabled: !server.enabled
     })
     await refreshExtensions()
@@ -278,7 +280,9 @@ export function ExtensionsView() {
 
                 <div>
                   <label className="block text-xs text-[#555] mb-1">
-                    {mcpTransport === 'stdio' ? 'Environment Variables (KEY=VALUE or env:VAR per line)' : 'HTTP Headers (Header=Value or env:VAR per line)'}
+                    {mcpTransport === 'stdio'
+                      ? 'Environment Variables (KEY=VALUE or env:VAR per line)'
+                      : 'HTTP Headers (Header=Value or env:VAR per line)'}
                   </label>
                   <textarea
                     rows={2}
@@ -297,10 +301,17 @@ export function ExtensionsView() {
 
                 {mcpError && <div className="text-xs text-red-600">{mcpError}</div>}
                 <div className="flex justify-end gap-2">
-                  <button type="button" onClick={resetMcpForm} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
+                  <button
+                    type="button"
+                    onClick={resetMcpForm}
+                    className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer"
+                  >
                     Cancel
                   </button>
-                  <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer">
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg cursor-pointer"
+                  >
                     {editingMcpId ? 'Update Server' : 'Save Server'}
                   </button>
                 </div>
@@ -470,7 +481,9 @@ export function ExtensionsView() {
                     value={skillSourceUri}
                     onChange={(e) => setSkillSourceUri(e.target.value)}
                     placeholder={
-                      skillSourceType === 'local' ? 'e.g. G:\\skills\\code-review' : 'https://github.com/org/my-skill.git'
+                      skillSourceType === 'local'
+                        ? 'e.g. G:\\skills\\code-review'
+                        : 'https://github.com/org/my-skill.git'
                     }
                     className="w-full px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg font-mono"
                   />
@@ -525,7 +538,10 @@ export function ExtensionsView() {
                 </div>
               ) : (
                 skills.map((sk) => (
-                  <div key={sk.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4">
+                  <div
+                    key={sk.id}
+                    className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4"
+                  >
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
                         <BookOpen size={14} className="text-[#c2542d]" />

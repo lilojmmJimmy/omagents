@@ -43,8 +43,18 @@ describe('Git Worktree Isolation & RepoMutex', () => {
 
       // Launch 2 worktree creations concurrently to exercise RepoMutex serialization
       const [wt1, wt2] = await Promise.all([
-        wsSvc.createWorktree({ projectWorkspaceId: proj.id, branchSlug: 'coder-a', ownerType: 'work_node', ownerId: 'n1' }),
-        wsSvc.createWorktree({ projectWorkspaceId: proj.id, branchSlug: 'coder-b', ownerType: 'work_node', ownerId: 'n2' })
+        wsSvc.createWorktree({
+          projectWorkspaceId: proj.id,
+          branchSlug: 'coder-a',
+          ownerType: 'work_node',
+          ownerId: 'n1'
+        }),
+        wsSvc.createWorktree({
+          projectWorkspaceId: proj.id,
+          branchSlug: 'coder-b',
+          ownerType: 'work_node',
+          ownerId: 'n2'
+        })
       ])
 
       expect(wt1.kind).toBe('git_worktree')

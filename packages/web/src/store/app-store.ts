@@ -51,8 +51,22 @@ export interface LiveTurnBuffer {
 
 export interface EnvCheckInfo {
   checkedAt: number
-  git: { kind: string; installed: boolean; version: string | null; path: string | null; ready: boolean; problem?: string }
-  clis: Array<{ kind: string; installed: boolean; version: string | null; path: string | null; ready: boolean; problem?: string }>
+  git: {
+    kind: string
+    installed: boolean
+    version: string | null
+    path: string | null
+    ready: boolean
+    problem?: string
+  }
+  clis: Array<{
+    kind: string
+    installed: boolean
+    version: string | null
+    path: string | null
+    ready: boolean
+    problem?: string
+  }>
 }
 
 interface AppState {
@@ -209,9 +223,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       rpc.call<EnvCheckInfo>('system.envCheck')
     ])
     set({ providers, agents, workspaces, rooms, envCheck })
-    void get().refreshInbox().catch(() => {})
-    void get().refreshExtensions().catch(() => {})
-    void get().refreshJobs().catch(() => {})
+    void get()
+      .refreshInbox()
+      .catch(() => {})
+    void get()
+      .refreshExtensions()
+      .catch(() => {})
+    void get()
+      .refreshJobs()
+      .catch(() => {})
     const curId = get().selectedRoomId
     if (curId && rooms.some((r) => r.id === curId)) {
       await get().selectRoom(curId)
@@ -331,7 +351,9 @@ async function connectAndBind(set: any, get: () => AppState) {
     rpc.onStatusChange((connected) => {
       set({ wsConnected: connected })
       if (connected && get().authenticated) {
-        void get().refreshAll().catch(() => {})
+        void get()
+          .refreshAll()
+          .catch(() => {})
       }
     })
     rpc.onNotification((notif) => {
@@ -340,9 +362,7 @@ async function connectAndBind(set: any, get: () => AppState) {
         const updated = params as RoomSummary
         set((s: AppState) => {
           const exists = s.rooms.some((r) => r.id === updated.id)
-          const rooms = exists
-            ? s.rooms.map((r) => (r.id === updated.id ? updated : r))
-            : [updated, ...s.rooms]
+          const rooms = exists ? s.rooms.map((r) => (r.id === updated.id ? updated : r)) : [updated, ...s.rooms]
           const currentRoom = s.currentRoom?.id === updated.id ? { ...s.currentRoom, ...updated } : s.currentRoom
           return { rooms, currentRoom }
         })
@@ -382,9 +402,13 @@ async function connectAndBind(set: any, get: () => AppState) {
           }
         })
       } else if (method === 'inbox.updated') {
-        void get().refreshInbox().catch(() => {})
+        void get()
+          .refreshInbox()
+          .catch(() => {})
       } else if (method === 'jobs.updated') {
-        void get().refreshJobs().catch(() => {})
+        void get()
+          .refreshJobs()
+          .catch(() => {})
       } else if (method === 'workNode.updated') {
         const node = params as WorkNode
         set((s: AppState) => {

@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
-import { Clock, Database, Play, Plus, Power, RotateCcw, Trash2 } from 'lucide-react'
 import type { BackgroundJobType, ScheduledJob } from '@myagents/protocol'
+import { Clock, Database, Play, Plus, Power, RotateCcw, Trash2 } from 'lucide-react'
+import { type FormEvent, useState } from 'react'
 import { rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -275,11 +275,7 @@ export function JobsView() {
                       />
                     </div>
                     <label className="inline-flex items-center gap-2 text-xs text-[#555] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={allowWrite}
-                        onChange={(e) => setAllowWrite(e.target.checked)}
-                      />
+                      <input type="checkbox" checked={allowWrite} onChange={(e) => setAllowWrite(e.target.checked)} />
                       <span>Allow write access (unchecked defaults to read-only)</span>
                     </label>
                   </div>
@@ -343,7 +339,10 @@ export function JobsView() {
                 </div>
               ) : (
                 schedules.map((s) => (
-                  <div key={s.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4">
+                  <div
+                    key={s.id}
+                    className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4"
+                  >
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2">
                         <Clock size={14} className={s.enabled ? 'text-[#c2542d]' : 'text-[#aaa]'} />
@@ -410,7 +409,10 @@ export function JobsView() {
               </div>
             ) : (
               jobs.map((j) => (
-                <div key={j.id} className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4">
+                <div
+                  key={j.id}
+                  className="bg-white border border-[#e5e5e5] rounded-xl p-4 flex items-center justify-between gap-4"
+                >
                   <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-[#111] font-mono">{j.jobType}</span>

@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import { pickLatestRetryableNode, type WorkNode } from '@myagents/protocol'
+import { describe, expect, it } from 'vitest'
 import { AgentService } from '../runtime/agent-service'
 import { AgentEnvironmentIsolator } from '../runtime/environment-isolator'
 import { CoreDatabase } from '../storage/database'
@@ -249,7 +249,13 @@ describe('CollabEngine.getRoom hasFailedNode', () => {
     insertWorkNode(database, { id: 'wn-1', requestMsgId: 'msg-1', status: 'failed', createdAt: 1000, updatedAt: 1500 })
     expect(engine.getRoom('room-1').hasFailedNode).toBe(true)
 
-    insertWorkNode(database, { id: 'wn-2', requestMsgId: 'msg-2', status: 'completed', createdAt: 2000, updatedAt: 2500 })
+    insertWorkNode(database, {
+      id: 'wn-2',
+      requestMsgId: 'msg-2',
+      status: 'completed',
+      createdAt: 2000,
+      updatedAt: 2500
+    })
     expect(engine.getRoom('room-1').hasFailedNode).toBe(false)
     database.close()
   })
@@ -258,7 +264,13 @@ describe('CollabEngine.getRoom hasFailedNode', () => {
     const { database, engine } = setupEngine()
     insertMessage(database, 'msg-1', 1)
     insertWorkNode(database, { id: 'wn-1', requestMsgId: 'msg-1', status: 'failed', createdAt: 2000, updatedAt: 2200 })
-    insertWorkNode(database, { id: 'wn-2', requestMsgId: 'msg-1', status: 'completed', createdAt: 2000, updatedAt: 2500 })
+    insertWorkNode(database, {
+      id: 'wn-2',
+      requestMsgId: 'msg-1',
+      status: 'completed',
+      createdAt: 2000,
+      updatedAt: 2500
+    })
 
     expect(engine.getRoom('room-1').hasFailedNode).toBe(true)
     database.close()

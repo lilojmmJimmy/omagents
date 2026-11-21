@@ -1,9 +1,9 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { startCoreServer } from '../packages/core/src/main.ts'
 
@@ -90,7 +90,13 @@ if (mockAnthropic) {
         }
       })
 
-      if (!rememberResultText && !hasCollabRemember && hasToolSearch && !toolSearchSent && raw.includes('mcp__myagents__collab_remember')) {
+      if (
+        !rememberResultText &&
+        !hasCollabRemember &&
+        hasToolSearch &&
+        !toolSearchSent &&
+        raw.includes('mcp__myagents__collab_remember')
+      ) {
         toolSearchSent = true
         sendEvent('content_block_start', {
           type: 'content_block_start',
@@ -103,7 +109,8 @@ if (mockAnthropic) {
           delta: {
             type: 'input_json_delta',
             partial_json: JSON.stringify({
-              query: 'select:mcp__myagents__collab_dispatch,mcp__myagents__collab_reply,mcp__myagents__collab_publish,mcp__myagents__collab_history,mcp__myagents__collab_remember',
+              query:
+                'select:mcp__myagents__collab_dispatch,mcp__myagents__collab_reply,mcp__myagents__collab_publish,mcp__myagents__collab_history,mcp__myagents__collab_remember',
               max_results: 10
             })
           }
@@ -231,7 +238,10 @@ try {
   const env = await rpcCall(ws, '1', 'system.envCheck', { refresh: true })
   console.log('ENV_CHECK:', JSON.stringify(env))
 
-  const proj = await rpcCall(ws, '2', 'workspaces.registerProject', { name: 'ClaudeV01bLiveRepo', rootPath: gitRepoDir })
+  const proj = await rpcCall(ws, '2', 'workspaces.registerProject', {
+    name: 'ClaudeV01bLiveRepo',
+    rootPath: gitRepoDir
+  })
   const leadIsolation = mockAnthropic ? 'isolated-home' : 'standard'
   const lead = await rpcCall(ws, '3', 'agents.create', {
     name: 'ClaudeLead',
@@ -292,14 +302,23 @@ try {
         }
         if (parsed.params.kind === 'tool_result') toolResults++
       }
-      if (parsed.method === 'room.messageCreated' && (parsed.params.authorKind === 'agent' || parsed.params.authorKind === 'system')) {
-        agentMessages.push({ kind: parsed.params.kind, authorKind: parsed.params.authorKind, content: parsed.params.content })
+      if (
+        parsed.method === 'room.messageCreated' &&
+        (parsed.params.authorKind === 'agent' || parsed.params.authorKind === 'system')
+      ) {
+        agentMessages.push({
+          kind: parsed.params.kind,
+          authorKind: parsed.params.authorKind,
+          content: parsed.params.content
+        })
       }
       if (parsed.method === 'workNode.updated') {
         console.log('WORK_NODE:', parsed.params.status, parsed.params.errorText || '')
         if (
           parsed.params.assigneeMemberId === leadMemberId &&
-          (parsed.params.status === 'completed' || parsed.params.status === 'failed' || parsed.params.status === 'cancelled')
+          (parsed.params.status === 'completed' ||
+            parsed.params.status === 'failed' ||
+            parsed.params.status === 'cancelled')
         ) {
           clearTimeout(timer)
           ws.off('message', onMsg)
@@ -326,7 +345,8 @@ try {
   const sessionFilePath = leadMemberAfter?.sessionFilePath ?? null
   const sessionFileExists = Boolean(sessionFilePath && existsSync(sessionFilePath))
   const sessionInIsolatedHome =
-    !mockAnthropic || Boolean(sessionFilePath && sessionFilePath.toLowerCase().startsWith(expectedAgentHome.toLowerCase()))
+    !mockAnthropic ||
+    Boolean(sessionFilePath && sessionFilePath.toLowerCase().startsWith(expectedAgentHome.toLowerCase()))
 
   const summary = {
     mode: mockAnthropic ? 'mock-anthropic-isolated-home' : 'live-upstream-standard',
@@ -361,7 +381,9 @@ try {
   }
   if (mockAnthropic) {
     if (sawCollabTools.size !== 5) {
-      throw new Error(`Expected all 5 collab MCP tools exposed to Claude, got ${sawCollabTools.size}: ${[...sawCollabTools].join(', ')}`)
+      throw new Error(
+        `Expected all 5 collab MCP tools exposed to Claude, got ${sawCollabTools.size}: ${[...sawCollabTools].join(', ')}`
+      )
     }
     if (sawBlockedSubagents) {
       throw new Error('Agent or Task tool was NOT stripped from Claude tools list!')

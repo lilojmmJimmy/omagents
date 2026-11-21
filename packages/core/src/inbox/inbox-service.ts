@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import type { InboundEnvelope } from '@myagents/plugin-sdk'
 import type {
   InboxItem,
   InboxStatus,
@@ -7,7 +8,6 @@ import type {
   WebhookConfig,
   WorkNode
 } from '@myagents/protocol'
-import type { InboundEnvelope } from '@myagents/plugin-sdk'
 import type { CollabEngine } from '../collab/collab-engine'
 import { Errors } from '../errors'
 import type { AgentService } from '../runtime/agent-service'
@@ -160,9 +160,9 @@ export class InboxService {
   }
 
   verifyWebhookSecret(hookId: string, secret: string): boolean {
-    const row = this.database.db
-      .prepare('SELECT secret_hash, enabled FROM webhooks WHERE id = ?')
-      .get(hookId) as { secret_hash: string; enabled: number } | undefined
+    const row = this.database.db.prepare('SELECT secret_hash, enabled FROM webhooks WHERE id = ?').get(hookId) as
+      | { secret_hash: string; enabled: number }
+      | undefined
     if (!row || !row.enabled || !secret) return false
     return timingSafeStringEqual(row.secret_hash, sha256Hex(secret))
   }
@@ -178,7 +178,9 @@ export class InboxService {
     const input = rawInput
     const id = input.id?.trim() || randomUUID()
     const now = Date.now()
-    const existing = this.database.db.prepare('SELECT id FROM routing_rules WHERE id = ?').get(id) as { id: string } | undefined
+    const existing = this.database.db.prepare('SELECT id FROM routing_rules WHERE id = ?').get(id) as
+      | { id: string }
+      | undefined
 
     if (existing) {
       this.database.db
@@ -221,7 +223,9 @@ export class InboxService {
           now
         )
     }
-    const row = this.database.db.prepare('SELECT * FROM routing_rules WHERE id = ?').get(id) as unknown as RoutingRuleRow
+    const row = this.database.db
+      .prepare('SELECT * FROM routing_rules WHERE id = ?')
+      .get(id) as unknown as RoutingRuleRow
     return mapRule(row)
   }
 
@@ -242,7 +246,9 @@ export class InboxService {
   }
 
   getItem(id: string): InboxItem {
-    const row = this.database.db.prepare('SELECT * FROM inbox_items WHERE id = ?').get(id) as unknown as InboxItemRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM inbox_items WHERE id = ?').get(id) as unknown as
+      | InboxItemRow
+      | undefined
     if (!row) throw Errors.notFound(`Inbox item not found: ${id}`)
     return mapItem(row)
   }
@@ -369,7 +375,11 @@ export class InboxService {
     const haystack = `${item.title}\n${item.content}`
 
     for (const rule of rules) {
-      if (rule.sourceFilter && rule.sourceFilter !== '*' && rule.sourceFilter.toLowerCase() !== item.source.toLowerCase()) {
+      if (
+        rule.sourceFilter &&
+        rule.sourceFilter !== '*' &&
+        rule.sourceFilter.toLowerCase() !== item.source.toLowerCase()
+      ) {
         continue
       }
       if (rule.matchType === 'always') return rule
@@ -435,14 +445,14 @@ export class InboxService {
     let targetRoomId = input.roomId
     if (input.mode === 'create_room' || !targetRoomId) {
       const candidateAgents = (input.agentIds ?? []).filter(Boolean)
-      const allActive = candidateAgents.length > 0
-        ? candidateAgents.map((id) => this.agents.get(id))
-        : this.agents.list(false).slice(0, 1)
+      const allActive =
+        candidateAgents.length > 0
+          ? candidateAgents.map((id) => this.agents.get(id))
+          : this.agents.list(false).slice(0, 1)
       if (allActive.length === 0) {
         throw Errors.invalidParams('No active agents available to assign inbox item')
       }
-      const chosenStrategy =
-        input.strategyId?.trim() || (allActive.length > 1 ? 'open-channel' : 'single')
+      const chosenStrategy = input.strategyId?.trim() || (allActive.length > 1 ? 'open-channel' : 'single')
       const created = await this.collab.createRoom({
         title: `[Ticket] ${item.title.slice(0, 60)}`,
         purpose: `Inbox ${item.source}:${item.externalKey}`,
@@ -452,7 +462,8 @@ export class InboxService {
         members: allActive.map((a, idx) => ({
           agentId: a.id,
           displayName: a.name,
-          roleKind: idx === 0 && chosenStrategy !== 'single' ? (chosenStrategy === 'roundtable' ? 'chair' : 'lead') : 'member'
+          roleKind:
+            idx === 0 && chosenStrategy !== 'single' ? (chosenStrategy === 'roundtable' ? 'chair' : 'lead') : 'member'
         }))
       })
       targetRoomId = created.id
@@ -528,7 +539,11 @@ export class InboxService {
     return `Resolved: ${item.title}`
   }
 
-  private recordReplyMeta(itemId: string, rawMeta: Record<string, unknown>, replyMeta: Record<string, unknown>): InboxItem {
+  private recordReplyMeta(
+    itemId: string,
+    rawMeta: Record<string, unknown>,
+    replyMeta: Record<string, unknown>
+  ): InboxItem {
     const nextMeta = { ...rawMeta, _reply: replyMeta }
     this.database.db
       .prepare('UPDATE inbox_items SET raw_meta_json = ?, updated_at = ? WHERE id = ?')

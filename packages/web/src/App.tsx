@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import type { WorkspaceMode } from '@myagents/protocol'
 import {
   BarChart3,
   Bot,
@@ -16,7 +16,7 @@ import {
   WifiOff,
   X
 } from 'lucide-react'
-import type { WorkspaceMode } from '@myagents/protocol'
+import { type FormEvent, type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
 import { rpc } from './api/rpc-client'
 import { AgentsView } from './components/AgentsView'
 import { AnalyticsView } from './components/AnalyticsView'
@@ -87,7 +87,11 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
 
     const chosenAgents = agents.filter((a) => selectedIds.includes(a.id))
     if (chosenAgents.length < 2) {
-      setError(mode === 'roundtable' ? 'Please select at least 2 agents for a roundtable' : 'Please select at least 2 agents for a group channel')
+      setError(
+        mode === 'roundtable'
+          ? 'Please select at least 2 agents for a roundtable'
+          : 'Please select at least 2 agents for a group channel'
+      )
       return
     }
     const leadId = chosenAgents.some((a) => a.id === leadAgentId) ? leadAgentId : chosenAgents[0]!.id
@@ -122,7 +126,10 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-4 shadow-lg">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md bg-white rounded-xl border border-[#e5e5e5] p-5 space-y-4 shadow-lg"
+      >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">New Room</h3>
           <button type="button" onClick={onClose} className="text-[#777] hover:text-[#111] cursor-pointer">
@@ -197,11 +204,7 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                     return (
                       <div key={a.id} className="flex items-center justify-between px-2.5 py-1.5 hover:bg-[#fafafa]">
                         <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleMember(a.id)}
-                          />
+                          <input type="checkbox" checked={checked} onChange={() => toggleMember(a.id)} />
                           <span className="truncate font-medium text-[#111]">{a.name}</span>
                           <span className="text-[10px] font-mono text-[#888]">{a.driverKind}</span>
                         </label>
@@ -253,19 +256,11 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
                     <span>Round 1 blind answers (Super-step Barrier atomic reveal)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-[#444]">
-                    <input
-                      type="checkbox"
-                      checked={anonymous}
-                      onChange={(e) => setAnonymous(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} />
                     <span>Anonymous peer review (mask speakers as Member A/B)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer text-[#444]">
-                    <input
-                      type="checkbox"
-                      checked={autoAdvance}
-                      onChange={(e) => setAutoAdvance(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={autoAdvance} onChange={(e) => setAutoAdvance(e.target.checked)} />
                     <span>Auto-advance rounds and summarize after each barrier</span>
                   </label>
                 </div>
@@ -329,10 +324,18 @@ function NewChatModal({ onClose }: { onClose: () => void }) {
 
         {error && <div className="text-xs text-red-600">{error}</div>}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs border border-[#dcdcdc] rounded-lg cursor-pointer"
+          >
             Cancel
           </button>
-          <button type="submit" disabled={agents.length === 0} className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg disabled:opacity-40 cursor-pointer">
+          <button
+            type="submit"
+            disabled={agents.length === 0}
+            className="px-3 py-1.5 text-xs font-medium bg-[#c2542d] text-white rounded-lg disabled:opacity-40 cursor-pointer"
+          >
             {mode === 'single' ? 'Create Chat' : mode === 'roundtable' ? 'Create Roundtable' : 'Create Channel'}
           </button>
         </div>
@@ -459,7 +462,10 @@ export function App() {
     <div className="h-full flex flex-col">
       {defaultPasswordWarning && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-xs text-amber-800 flex items-center justify-between">
-          <span>The server is bound to a non-local interface with default credentials (admin/admin). Please change the password in Settings.</span>
+          <span>
+            The server is bound to a non-local interface with default credentials (admin/admin). Please change the
+            password in Settings.
+          </span>
           <button type="button" onClick={() => setNavPage('settings')} className="underline font-medium cursor-pointer">
             Change Password
           </button>
@@ -468,15 +474,16 @@ export function App() {
 
       <div ref={layoutRef} className="flex-1 flex min-h-0 overflow-hidden">
         {/* Left Sidebar */}
-        <aside
-          style={{ width: asideWidth }}
-          className="bg-[#f8f8f8] flex flex-col shrink-0 min-w-0"
-        >
+        <aside style={{ width: asideWidth }} className="bg-[#f8f8f8] flex flex-col shrink-0 min-w-0">
           <div className="h-12 px-3.5 border-b border-[#eaeaea] flex items-center justify-between">
             <span className="font-semibold text-sm tracking-tight">MyAgents</span>
             <div className="flex items-center gap-1.5">
               <span title={wsConnected ? 'Connected to Core' : 'Disconnected'}>
-                {wsConnected ? <Wifi size={13} className="text-green-600" /> : <WifiOff size={13} className="text-red-500" />}
+                {wsConnected ? (
+                  <Wifi size={13} className="text-green-600" />
+                ) : (
+                  <WifiOff size={13} className="text-red-500" />
+                )}
               </span>
               <button
                 type="button"
@@ -491,16 +498,18 @@ export function App() {
 
           {/* Primary Nav */}
           <nav className="p-2 space-y-0.5 border-b border-[#eaeaea] text-xs">
-            {([
-              ['chat', 'Chats', MessageSquare],
-              ['inbox', 'Inbox', Inbox],
-              ['agents', 'Agents', Bot],
-              ['extensions', 'Extensions', Puzzle],
-              ['jobs', 'Jobs & Cron', Clock],
-              ['analytics', 'Usage & Cost', BarChart3],
-              ['workspaces', 'Workspaces', Folder],
-              ['settings', 'Settings', Settings]
-            ] as const).map(([key, label, Icon]) => (
+            {(
+              [
+                ['chat', 'Chats', MessageSquare],
+                ['inbox', 'Inbox', Inbox],
+                ['agents', 'Agents', Bot],
+                ['extensions', 'Extensions', Puzzle],
+                ['jobs', 'Jobs & Cron', Clock],
+                ['analytics', 'Usage & Cost', BarChart3],
+                ['workspaces', 'Workspaces', Folder],
+                ['settings', 'Settings', Settings]
+              ] as const
+            ).map(([key, label, Icon]) => (
               <button
                 key={key}
                 type="button"
@@ -586,7 +595,12 @@ export function App() {
                   <PanelRight size={14} />
                 </button>
               )}
-              <button type="button" onClick={() => void logout()} className="p-1 hover:bg-[#eaeaea] rounded cursor-pointer" title="Sign out">
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="p-1 hover:bg-[#eaeaea] rounded cursor-pointer"
+                title="Sign out"
+              >
                 <LogOut size={14} />
               </button>
             </div>

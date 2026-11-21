@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
   COLLAB_TOOLS,
-  LOCK_HOLDING_STATUSES,
-  SETTLED_NODE_STATUSES,
   type CollabStrategy,
   type CollabToolName,
   type DriverKind,
@@ -16,6 +14,7 @@ import {
   type RoomMessage,
   type RoomSnapshot,
   type RoomSummary,
+  SETTLED_NODE_STATUSES,
   type SharedMemory,
   type StreamDeltaNotification,
   type WorkNode,
@@ -29,7 +28,7 @@ import { writeRoomMemberMcpConfig } from '../mcp/mcp-config'
 import type { McpRegistryService } from '../mcp/mcp-registry'
 import type { AgentService } from '../runtime/agent-service'
 import { resolveClaudeSessionFilePath } from '../runtime/claude-driver'
-import type { AgentDriver, SessionRecord, TurnStreamEvent } from '../runtime/driver'
+import type { AgentDriver, SessionRecord, TurnOutput, TurnStreamEvent } from '../runtime/driver'
 import type { SkillRegistryService } from '../runtime/skill-registry'
 import type { BlobService } from '../storage/blob-service'
 import type { CoreDatabase } from '../storage/database'
@@ -37,7 +36,7 @@ import type { WorkspaceService } from '../workspace/workspace-service'
 import { buildTurnContext } from './context-builder'
 import { openChannelStrategy, RESUME_COMMAND_REGEX } from './open-channel-strategy'
 import { roundtableStrategy } from './roundtable-strategy'
-import { buildNodeClaims, ResourceLockManager, type ResourceClaim } from './rw-lock'
+import { buildNodeClaims, type ResourceClaim, ResourceLockManager } from './rw-lock'
 import { singleStrategy } from './single-strategy'
 
 export interface CollabEvents {
@@ -333,7 +332,9 @@ export class CollabEngine {
         const live = liveMap.get(s.daemon_session_id)
         if (!live || live.exited) {
           this.database.db
-            .prepare("UPDATE agent_sessions SET daemon_session_id = NULL, status = 'hibernated', updated_at = ? WHERE id = ?")
+            .prepare(
+              "UPDATE agent_sessions SET daemon_session_id = NULL, status = 'hibernated', updated_at = ? WHERE id = ?"
+            )
             .run(now, s.id)
         } else {
           this.database.db
@@ -357,7 +358,9 @@ export class CollabEngine {
         touchedRooms.add(n.room_id)
       }
       for (const roomId of touchedRooms) {
-        this.database.db.prepare("UPDATE rooms SET state = 'active', updated_at = ? WHERE id = ? AND state = 'running'").run(now, roomId)
+        this.database.db
+          .prepare("UPDATE rooms SET state = 'active', updated_at = ? WHERE id = ? AND state = 'running'")
+          .run(now, roomId)
       }
 
       // 3. Scan pending work_deliveries and wake target parents atomically
@@ -421,7 +424,9 @@ export class CollabEngine {
   private mapRoom(row: RoomRow): RoomDetail {
     const members = this.getMembers(row.id, row.primary_workspace_id)
     const activeCountRow = this.database.db
-      .prepare("SELECT COUNT(*) AS c FROM work_nodes WHERE room_id = ? AND status IN ('queued','waiting_deps','waiting_lock','starting','running','waiting_children')")
+      .prepare(
+        "SELECT COUNT(*) AS c FROM work_nodes WHERE room_id = ? AND status IN ('queued','waiting_deps','waiting_lock','starting','running','waiting_children')"
+      )
       .get(row.id) as { c: number }
     const latestNodeRow = this.database.db
       .prepare(
@@ -490,7 +495,9 @@ export class CollabEngine {
   }
 
   getRoom(id: string): RoomDetail {
-    const row = this.database.db.prepare('SELECT * FROM rooms WHERE id = ? AND deleted_at IS NULL').get(id) as unknown as RoomRow | undefined
+    const row = this.database.db
+      .prepare('SELECT * FROM rooms WHERE id = ? AND deleted_at IS NULL')
+      .get(id) as unknown as RoomRow | undefined
     if (!row) throw Errors.notFound(`Room not found: ${id}`)
     return this.mapRoom(row)
   }
@@ -567,7 +574,9 @@ export class CollabEngine {
     const now = Date.now()
     const defaultTitle =
       input.title?.trim() ||
-      (input.strategyId === 'single' ? `${resolvedAgents[0]!.agent.name}` : `Room (${resolvedAgents.map((r) => r.agent.name).join(', ')})`)
+      (input.strategyId === 'single'
+        ? `${resolvedAgents[0]!.agent.name}`
+        : `Room (${resolvedAgents.map((r) => r.agent.name).join(', ')})`)
 
     this.database.transaction(() => {
       const primaryWorkspaceId = input.primaryWorkspaceId
@@ -600,7 +609,16 @@ export class CollabEngine {
             `INSERT INTO room_members (id, room_id, agent_id, display_name, role_kind, role_prompt, position, joined_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           )
-          .run(memberId, id, agent.id, m.displayName?.trim() || agent.name, m.roleKind ?? 'member', m.rolePrompt ?? '', idx, now)
+          .run(
+            memberId,
+            id,
+            agent.id,
+            m.displayName?.trim() || agent.name,
+            m.roleKind ?? 'member',
+            m.rolePrompt ?? '',
+            idx,
+            now
+          )
 
         this.database.db
           .prepare(
@@ -651,9 +669,9 @@ export class CollabEngine {
 
     // 4. Release blob refs before hard-deleting room & cascaded messages
     if (this.blobs) {
-      const msgRows = this.database.db
-        .prepare('SELECT id FROM room_messages WHERE room_id = ?')
-        .all(roomId) as Array<{ id: string }>
+      const msgRows = this.database.db.prepare('SELECT id FROM room_messages WHERE room_id = ?').all(roomId) as Array<{
+        id: string
+      }>
       this.blobs.releaseOwnerRefs(
         'message',
         msgRows.map((m) => m.id)
@@ -716,7 +734,9 @@ export class CollabEngine {
         .get(roomId, input.idempotencyKey) as unknown as MessageRow | undefined
       if (dup) {
         const existingRoots = this.database.db
-          .prepare('SELECT id FROM work_nodes WHERE request_msg_id = ? AND parent_node_id IS NULL ORDER BY created_at ASC')
+          .prepare(
+            'SELECT id FROM work_nodes WHERE request_msg_id = ? AND parent_node_id IS NULL ORDER BY created_at ASC'
+          )
           .all(dup.id) as Array<{ id: string }>
         return { message: mapMessage(dup), spawnedRootNodeIds: existingRoots.map((r) => r.id) }
       }
@@ -759,7 +779,9 @@ export class CollabEngine {
         if (msg.seq === 1 && room.strategyId === 'single') {
           const shortTitle = effectiveContent.split(/\r?\n/)[0]?.trim().slice(0, 40)
           if (shortTitle) {
-            this.database.db.prepare('UPDATE rooms SET title = ?, updated_at = ? WHERE id = ?').run(shortTitle, Date.now(), roomId)
+            this.database.db
+              .prepare('UPDATE rooms SET title = ?, updated_at = ? WHERE id = ?')
+              .run(shortTitle, Date.now(), roomId)
           }
         }
 
@@ -779,7 +801,11 @@ export class CollabEngine {
               .run(now, pausedRoot.id)
             this.database.db.prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ?").run(now, roomId)
             emittedNodes.push(
-              mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(pausedRoot.id) as unknown as WorkNodeRow)
+              mapNode(
+                this.database.db
+                  .prepare('SELECT * FROM work_nodes WHERE id = ?')
+                  .get(pausedRoot.id) as unknown as WorkNodeRow
+              )
             )
             spawnedRootNodeIds.push(pausedRoot.id)
             emittedMessages.push(
@@ -915,7 +941,9 @@ export class CollabEngine {
         nextConfig = strategy ? strategy.configSchema.parse(patch.strategyConfig) : patch.strategyConfig
       }
       this.database.db
-        .prepare('UPDATE rooms SET title = ?, strategy_config_json = ?, shared_memories_json = ?, updated_at = ? WHERE id = ?')
+        .prepare(
+          'UPDATE rooms SET title = ?, strategy_config_json = ?, shared_memories_json = ?, updated_at = ? WHERE id = ?'
+        )
         .run(nextTitle, JSON.stringify(nextConfig), JSON.stringify(nextMemories), now, roomId)
       const updated = this.getRoom(roomId)
       this.events.roomUpdated(updated)
@@ -965,11 +993,15 @@ export class CollabEngine {
     targetMemberId?: string
   ): Promise<WorkNode> {
     if (this.reconciling) throw Errors.reconciling()
-    const existingRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as WorkNodeRow | undefined
+    const existingRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as
+      | WorkNodeRow
+      | undefined
     if (!existingRow) throw Errors.notFound(`WorkNode not found: ${nodeId}`)
 
     return await this.serially(existingRow.room_id, () => {
-      const row = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as WorkNodeRow | undefined
+      const row = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as
+        | WorkNodeRow
+        | undefined
       if (!row) throw Errors.notFound(`WorkNode not found: ${nodeId}`)
       const now = Date.now()
       const touchedNodes: WorkNode[] = []
@@ -985,7 +1017,9 @@ export class CollabEngine {
         }
         this.database.transaction(() => {
           this.database.db
-            .prepare("UPDATE work_nodes SET status = 'paused', lease_token = NULL, blocking_reason = NULL, ended_at = NULL, updated_at = ? WHERE id = ?")
+            .prepare(
+              "UPDATE work_nodes SET status = 'paused', lease_token = NULL, blocking_reason = NULL, ended_at = NULL, updated_at = ? WHERE id = ?"
+            )
             .run(now, nodeId)
           this.database.db
             .prepare("UPDATE rooms SET state = 'active', updated_at = ? WHERE id = ? AND state = 'running'")
@@ -996,7 +1030,9 @@ export class CollabEngine {
         this.database.transaction(() => {
           const cancelledIds = this.cancelNodeTreeTx(nodeId, 'cancelled_by_user', now)
           for (const cid of cancelledIds) {
-            const cRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(cid) as unknown as WorkNodeRow | undefined
+            const cRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(cid) as unknown as
+              | WorkNodeRow
+              | undefined
             if (cRow) touchedNodes.push(mapNode(cRow))
           }
           if (row.superstep !== null) {
@@ -1014,7 +1050,9 @@ export class CollabEngine {
         if (!['failed', 'paused', 'cancelled'].includes(row.status)) {
           throw Errors.conflict('invalid_state', `Cannot ${action} work node in status ${row.status}`)
         }
-        const nextInstruction = note?.trim() ? `${row.instruction}\n\n[User follow-up]: ${note.trim()}` : row.instruction
+        const nextInstruction = note?.trim()
+          ? `${row.instruction}\n\n[User follow-up]: ${note.trim()}`
+          : row.instruction
         this.database.transaction(() => {
           this.database.db
             .prepare(
@@ -1023,7 +1061,9 @@ export class CollabEngine {
                WHERE id = ?`
             )
             .run(nextInstruction, now, nodeId)
-          this.database.db.prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ?").run(now, row.room_id)
+          this.database.db
+            .prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ?")
+            .run(now, row.room_id)
         })
       } else if (action === 'reassign') {
         if (!targetMemberId?.trim()) {
@@ -1044,7 +1084,9 @@ export class CollabEngine {
           if (!SETTLED_NODE_STATUSES.has(row.status)) {
             const cancelledIds = this.cancelNodeTreeTx(nodeId, `reassigned_to:${targetMember.displayName}`, now)
             for (const cid of cancelledIds) {
-              const cRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(cid) as unknown as WorkNodeRow | undefined
+              const cRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(cid) as unknown as
+                | WorkNodeRow
+                | undefined
               if (cRow) touchedNodes.push(mapNode(cRow))
             }
           }
@@ -1086,7 +1128,11 @@ export class CollabEngine {
           this.database.db
             .prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ? AND state != 'paused'")
             .run(now, row.room_id)
-          const spawned = mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(replacementId) as unknown as WorkNodeRow)
+          const spawned = mapNode(
+            this.database.db
+              .prepare('SELECT * FROM work_nodes WHERE id = ?')
+              .get(replacementId) as unknown as WorkNodeRow
+          )
           touchedNodes.push(spawned)
           emittedMessages.push(
             this.insertMessageTx(row.room_id, {
@@ -1106,7 +1152,9 @@ export class CollabEngine {
         })
       }
 
-      const updated = mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as WorkNodeRow)
+      const updated = mapNode(
+        this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as WorkNodeRow
+      )
       for (const m of emittedMessages) this.events.messageCreated(m)
       for (const r of emittedReveals) this.events.messagesRevealed?.(r)
       this.events.workNodeUpdated(updated)
@@ -1129,12 +1177,14 @@ export class CollabEngine {
       if (visited.has(id)) continue
       visited.add(id)
 
-      const row = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(id) as unknown as WorkNodeRow | undefined
+      const row = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(id) as unknown as
+        | WorkNodeRow
+        | undefined
       if (!row) continue
 
-      const children = this.database.db
-        .prepare('SELECT id FROM work_nodes WHERE parent_node_id = ?')
-        .all(id) as Array<{ id: string }>
+      const children = this.database.db.prepare('SELECT id FROM work_nodes WHERE parent_node_id = ?').all(id) as Array<{
+        id: string
+      }>
       for (const ch of children) queue.push(ch.id)
 
       if (SETTLED_NODE_STATUSES.has(row.status)) continue
@@ -1204,7 +1254,9 @@ export class CollabEngine {
         opts.idempotencyKey ?? null,
         now
       )
-    return mapMessage(this.database.db.prepare('SELECT * FROM room_messages WHERE id = ?').get(id) as unknown as MessageRow)
+    return mapMessage(
+      this.database.db.prepare('SELECT * FROM room_messages WHERE id = ?').get(id) as unknown as MessageRow
+    )
   }
 
   private buildSnapshotTx(roomId: string): RoomSnapshot {
@@ -1243,14 +1295,12 @@ export class CollabEngine {
   }
 
   private deliverWorkDeliveryTx(deliveryId: string, now: number): WorkNode | null {
-    const row = this.database.db
-      .prepare('SELECT * FROM work_deliveries WHERE id = ?')
-      .get(deliveryId) as unknown as DeliveryRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM work_deliveries WHERE id = ?').get(deliveryId) as unknown as
+      | DeliveryRow
+      | undefined
     if (!row || row.status !== 'pending') return null
 
-    this.database.db
-      .prepare("UPDATE work_deliveries SET status = 'sent', sent_at = ? WHERE id = ?")
-      .run(now, row.id)
+    this.database.db.prepare("UPDATE work_deliveries SET status = 'sent', sent_at = ? WHERE id = ?").run(now, row.id)
 
     const target = this.database.db
       .prepare('SELECT * FROM work_nodes WHERE id = ?')
@@ -1268,7 +1318,9 @@ export class CollabEngine {
       this.database.db
         .prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ? AND state != 'paused'")
         .run(now, target.room_id)
-      return mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(target.id) as unknown as WorkNodeRow)
+      return mapNode(
+        this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(target.id) as unknown as WorkNodeRow
+      )
     }
     return null
   }
@@ -1297,7 +1349,9 @@ export class CollabEngine {
         if (!member) continue
         const nodeId = randomUUID()
         const parentRow = action.parentNodeId
-          ? (this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(action.parentNodeId) as unknown as WorkNodeRow | undefined)
+          ? (this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(action.parentNodeId) as unknown as
+              | WorkNodeRow
+              | undefined)
           : undefined
         const rootId = parentRow?.root_node_id ?? nodeId
         const depth = parentRow ? parentRow.depth + 1 : 0
@@ -1365,12 +1419,18 @@ export class CollabEngine {
             .prepare('INSERT OR IGNORE INTO work_node_deps (node_id, depends_on_id) VALUES (?, ?)')
             .run(nodeId, depId)
         }
-        nodes.push(mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as WorkNodeRow))
+        nodes.push(
+          mapNode(
+            this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(nodeId) as unknown as WorkNodeRow
+          )
+        )
       } else if (action.type === 'cancel_nodes') {
         for (const nid of action.nodeIds) {
           const cancelledIds = this.cancelNodeTreeTx(nid, action.reason, now)
           for (const cid of cancelledIds) {
-            const cRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(cid) as unknown as WorkNodeRow | undefined
+            const cRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(cid) as unknown as
+              | WorkNodeRow
+              | undefined
             if (cRow) nodes.push(mapNode(cRow))
           }
         }
@@ -1390,7 +1450,9 @@ export class CollabEngine {
         })
         messages.push(m)
       } else if (action.type === 'update_strategy_state') {
-        const curRow = this.database.db.prepare('SELECT strategy_state_json FROM rooms WHERE id = ?').get(roomId) as { strategy_state_json: string }
+        const curRow = this.database.db.prepare('SELECT strategy_state_json FROM rooms WHERE id = ?').get(roomId) as {
+          strategy_state_json: string
+        }
         const prev = JSON.parse(curRow.strategy_state_json || '{}') as Record<string, unknown>
         const next = strategy.reduceState(prev, action.delta)
         this.database.db
@@ -1398,7 +1460,9 @@ export class CollabEngine {
           .run(JSON.stringify(next), now, roomId)
       } else if (action.type === 'set_room_state') {
         if (allowUnpause) {
-          this.database.db.prepare('UPDATE rooms SET state = ?, updated_at = ? WHERE id = ?').run(action.state, now, roomId)
+          this.database.db
+            .prepare('UPDATE rooms SET state = ?, updated_at = ? WHERE id = ?')
+            .run(action.state, now, roomId)
         } else {
           this.database.db
             .prepare("UPDATE rooms SET state = ?, updated_at = ? WHERE id = ? AND state != 'paused'")
@@ -1410,7 +1474,9 @@ export class CollabEngine {
           .get(now, roomId) as { last_seq: number }
         for (const msgId of action.messageIds) {
           this.database.db
-            .prepare("UPDATE room_messages SET visibility_scope = 'public', visible_seq = ? WHERE id = ? AND room_id = ?")
+            .prepare(
+              "UPDATE room_messages SET visibility_scope = 'public', visible_seq = ? WHERE id = ? AND room_id = ?"
+            )
             .run(seqRow.last_seq, msgId, roomId)
         }
         revealed.push({ roomId, messageIds: [...action.messageIds], visibleSeq: seqRow.last_seq })
@@ -1495,7 +1561,9 @@ export class CollabEngine {
           this.database.db
             .prepare("UPDATE work_nodes SET status = 'waiting_lock', blocking_reason = ?, updated_at = ? WHERE id = ?")
             .run(reason, Date.now(), row.id)
-          const updatedWaiting = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow | undefined
+          const updatedWaiting = this.database.db
+            .prepare('SELECT * FROM work_nodes WHERE id = ?')
+            .get(row.id) as unknown as WorkNodeRow | undefined
           if (updatedWaiting) this.events.workNodeUpdated(mapNode(updatedWaiting))
         }
         if (claims.some((c) => c.mode === 'write' && c.path)) {
@@ -1508,7 +1576,9 @@ export class CollabEngine {
       const leaseToken = randomUUID()
       const now = Date.now()
       const res = this.database.db
-        .prepare("UPDATE work_nodes SET status = 'starting', blocking_reason = NULL, lease_token = ?, started_at = ?, updated_at = ? WHERE id = ? AND status IN ('queued', 'waiting_lock')")
+        .prepare(
+          "UPDATE work_nodes SET status = 'starting', blocking_reason = NULL, lease_token = ?, started_at = ?, updated_at = ? WHERE id = ? AND status IN ('queued', 'waiting_lock')"
+        )
         .run(leaseToken, now, now, row.id)
       if (res.changes !== 1) continue
 
@@ -1516,7 +1586,11 @@ export class CollabEngine {
       this.locks.acquire(row.id, claims)
       this.agentRunningCounts.set(agent.id, runningForAgent + 1)
       this.inFlight.set(row.id, { leaseToken, abort, agentId: agent.id })
-      toLaunch.push({ node: { ...row, status: 'starting', blocking_reason: null, lease_token: leaseToken }, leaseToken, abort })
+      toLaunch.push({
+        node: { ...row, status: 'starting', blocking_reason: null, lease_token: leaseToken },
+        leaseToken,
+        abort
+      })
     }
 
     // Launch all claimed nodes asynchronously outside any lock
@@ -1535,9 +1609,9 @@ export class CollabEngine {
   }
 
   private checkLeaseValid(nodeId: string, leaseToken: string, allowedStatuses: string[]): boolean {
-    const row = this.database.db
-      .prepare('SELECT status, lease_token FROM work_nodes WHERE id = ?')
-      .get(nodeId) as { status: string; lease_token: string | null } | undefined
+    const row = this.database.db.prepare('SELECT status, lease_token FROM work_nodes WHERE id = ?').get(nodeId) as
+      | { status: string; lease_token: string | null }
+      | undefined
     return Boolean(row && row.lease_token === leaseToken && allowedStatuses.includes(row.status))
   }
 
@@ -1595,7 +1669,9 @@ export class CollabEngine {
             extraResources: JSON.parse(row.resources_json || '[]') as string[]
           })
         )
-        const updatedRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow | undefined
+        const updatedRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as
+          | WorkNodeRow
+          | undefined
         if (updatedRow) this.events.workNodeUpdated(mapNode(updatedRow))
       }
 
@@ -1645,9 +1721,18 @@ export class CollabEngine {
       // Transition starting -> running
       const now = Date.now()
       this.database.db
-        .prepare("UPDATE work_nodes SET status = 'running', blocking_reason = NULL, driver_snapshot_json = ?, updated_at = ? WHERE id = ? AND lease_token = ?")
-        .run(JSON.stringify({ driverKind: agent.driverKind, model: agent.driverConfig.model ?? null }), now, row.id, leaseToken)
-      this.events.workNodeUpdated(mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow))
+        .prepare(
+          "UPDATE work_nodes SET status = 'running', blocking_reason = NULL, driver_snapshot_json = ?, updated_at = ? WHERE id = ? AND lease_token = ?"
+        )
+        .run(
+          JSON.stringify({ driverKind: agent.driverKind, model: agent.driverConfig.model ?? null }),
+          now,
+          row.id,
+          leaseToken
+        )
+      this.events.workNodeUpdated(
+        mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow)
+      )
 
       const sessionRow = this.database.db
         .prepare('SELECT * FROM agent_sessions WHERE room_member_id = ?')
@@ -1665,7 +1750,9 @@ export class CollabEngine {
         lastConsumedOffset: sessionRow.last_consumed_offset
       }
 
-      this.database.db.prepare("UPDATE agent_sessions SET status = 'busy', last_active_at = ?, updated_at = ? WHERE id = ?").run(now, now, session.id)
+      this.database.db
+        .prepare("UPDATE agent_sessions SET status = 'busy', last_active_at = ?, updated_at = ? WHERE id = ?")
+        .run(now, now, session.id)
 
       const visibleMessages = this.getVisibleMessagesForMember(row.room_id, row.assignee_member_id, 60)
       const deliveryRows = this.database.db
@@ -1677,7 +1764,9 @@ export class CollabEngine {
         Boolean(session.nativeSessionId && session.configHash === configHash && session.lastDeliveredSeq > 0) &&
         (agent.driverKind !== 'claude' || Boolean(session.daemonSessionId))
 
-      const latestNodeObj = mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow)
+      const latestNodeObj = mapNode(
+        this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow
+      )
       const turnContext = buildTurnContext({
         room,
         member,
@@ -1740,7 +1829,7 @@ export class CollabEngine {
         }
       }
 
-      let output
+      let output: TurnOutput
       try {
         output = await driver.runTurn({
           session,
@@ -1823,7 +1912,9 @@ export class CollabEngine {
           return 'skip' as const
         }
 
-        const freshRow = this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow
+        const freshRow = this.database.db
+          .prepare('SELECT * FROM work_nodes WHERE id = ?')
+          .get(row.id) as unknown as WorkNodeRow
         if (freshRow.transferred_to_node_id) {
           this.releaseExecutionLease(row.id, agent.id)
           return 'skip' as const
@@ -1856,11 +1947,15 @@ export class CollabEngine {
                  WHERE id = ?`
               )
               .run(output.finalText ?? null, output.usage ? JSON.stringify(output.usage) : null, nowTs, row.id)
-            const latestRoom = this.database.db.prepare('SELECT last_seq FROM rooms WHERE id = ?').get(row.room_id) as { last_seq: number }
+            const latestRoom = this.database.db.prepare('SELECT last_seq FROM rooms WHERE id = ?').get(row.room_id) as {
+              last_seq: number
+            }
             this.database.db
               .prepare('UPDATE agent_sessions SET last_delivered_seq = ?, updated_at = ? WHERE room_member_id = ?')
               .run(latestRoom.last_seq, nowTs, row.assignee_member_id)
-            const waitingNode = mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow)
+            const waitingNode = mapNode(
+              this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow
+            )
             this.events.workNodeUpdated(waitingNode)
             this.events.roomUpdated(this.getRoom(row.room_id))
             return 'waiting' as const
@@ -1869,7 +1964,9 @@ export class CollabEngine {
           // All undelivered children already settled before parent finished its turn -> create & deliver batch now!
           const woken = this.database.transaction(() => {
             this.database.db
-              .prepare("UPDATE work_nodes SET status = 'waiting_children', lease_token = NULL, updated_at = ? WHERE id = ?")
+              .prepare(
+                "UPDATE work_nodes SET status = 'waiting_children', lease_token = NULL, updated_at = ? WHERE id = ?"
+              )
               .run(nowTs, row.id)
             const deliveryId = this.createWorkDeliveryTx(row.room_id, row.id, undeliveredChildren, nowTs)
             return this.deliverWorkDeliveryTx(deliveryId, nowTs)
@@ -1902,17 +1999,15 @@ export class CollabEngine {
     }
   }
 
-  private createWorkDeliveryTx(
-    roomId: string,
-    targetNodeId: string,
-    children: WorkNodeRow[],
-    now: number
-  ): string {
+  private createWorkDeliveryTx(roomId: string, targetNodeId: string, children: WorkNodeRow[], now: number): string {
     const room = this.getRoom(roomId)
     const memberMap = new Map(room.members.map((m) => [m.id, m]))
     const sections = children.map((c, idx) => {
       const assignee = memberMap.get(c.assignee_member_id)?.displayName ?? c.assignee_member_id
-      const outcome = c.status === 'completed' ? (c.result_text || '(completed without text)') : `(${c.status}: ${c.error_text || 'no details'})`
+      const outcome =
+        c.status === 'completed'
+          ? c.result_text || '(completed without text)'
+          : `(${c.status}: ${c.error_text || 'no details'})`
       return [
         `${idx + 1}. childNodeId=${c.id} | kind=${c.kind} | assignee=@${assignee} | status=${c.status}${c.workspace_id ? ` | workspaceId=${c.workspace_id}` : ''}`,
         `Result:\n${outcome.slice(0, 8000)}`
@@ -2030,7 +2125,11 @@ export class CollabEngine {
               )
               .run(`upstream_failed:${row.id}`, now, now, depTarget.id)
             emittedNodes.push(
-              mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(depTarget.id) as unknown as WorkNodeRow)
+              mapNode(
+                this.database.db
+                  .prepare('SELECT * FROM work_nodes WHERE id = ?')
+                  .get(depTarget.id) as unknown as WorkNodeRow
+              )
             )
           } else {
             const uncompleted = this.database.db
@@ -2046,7 +2145,11 @@ export class CollabEngine {
                 .prepare("UPDATE work_nodes SET status = 'queued', blocking_reason = NULL, updated_at = ? WHERE id = ?")
                 .run(now, depTarget.id)
               emittedNodes.push(
-                mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(depTarget.id) as unknown as WorkNodeRow)
+                mapNode(
+                  this.database.db
+                    .prepare('SELECT * FROM work_nodes WHERE id = ?')
+                    .get(depTarget.id) as unknown as WorkNodeRow
+                )
               )
             }
           }
@@ -2097,12 +2200,16 @@ export class CollabEngine {
         }
 
         // Sync member's last_delivered_seq BEFORE any Super-step barrier reveal so newly revealed peer msgs stay > last_delivered_seq
-        const latestRoom = this.database.db.prepare('SELECT last_seq FROM rooms WHERE id = ?').get(row.room_id) as { last_seq: number }
+        const latestRoom = this.database.db.prepare('SELECT last_seq FROM rooms WHERE id = ?').get(row.room_id) as {
+          last_seq: number
+        }
         this.database.db
           .prepare('UPDATE agent_sessions SET last_delivered_seq = ?, updated_at = ? WHERE room_member_id = ?')
           .run(latestRoom.last_seq, now, row.assignee_member_id)
 
-        const updatedNode = mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow)
+        const updatedNode = mapNode(
+          this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(row.id) as unknown as WorkNodeRow
+        )
         const strategy = this.strategies.get(room.strategyId)
         if (strategy) {
           const snapshot = this.buildSnapshotTx(row.room_id)
@@ -2164,13 +2271,21 @@ export class CollabEngine {
 
       const callerRow = req.workNodeId
         ? (this.database.db
-            .prepare("SELECT * FROM work_nodes WHERE id = ? AND room_id = ? AND assignee_member_id = ? AND status = 'running'")
+            .prepare(
+              "SELECT * FROM work_nodes WHERE id = ? AND room_id = ? AND assignee_member_id = ? AND status = 'running'"
+            )
             .get(req.workNodeId, req.roomId, req.memberId) as unknown as WorkNodeRow | undefined)
         : (this.database.db
-            .prepare("SELECT * FROM work_nodes WHERE room_id = ? AND assignee_member_id = ? AND status = 'running' ORDER BY updated_at DESC LIMIT 1")
+            .prepare(
+              "SELECT * FROM work_nodes WHERE room_id = ? AND assignee_member_id = ? AND status = 'running' ORDER BY updated_at DESC LIMIT 1"
+            )
             .get(req.roomId, req.memberId) as unknown as WorkNodeRow | undefined)
       if (!callerRow) {
-        return { ok: false, isError: true, output: `No active running workNode found for member @${callerMember.displayName}` }
+        return {
+          ok: false,
+          isError: true,
+          output: `No active running workNode found for member @${callerMember.displayName}`
+        }
       }
 
       const callerNode = mapNode(callerRow)
@@ -2232,7 +2347,9 @@ export class CollabEngine {
             )
             .all(callerRow.id) as Array<{ id: string }>
           if (unsettled.length > 0) {
-            return replyError(`Cannot call collab_publish while ${unsettled.length} subtask(s) are still running/queued. Wait for them to finish first.`)
+            return replyError(
+              `Cannot call collab_publish while ${unsettled.length} subtask(s) are still running/queued. Wait for them to finish first.`
+            )
           }
 
           this.database.transaction(() => {
@@ -2270,7 +2387,9 @@ export class CollabEngine {
 
         if (toolName === 'collab_dispatch') {
           const mode = req.args.mode === 'transfer' ? 'transfer' : 'subtask'
-          const rawRecipient = String(req.args.recipientMember ?? '').trim().replace(/^@/, '')
+          const rawRecipient = String(req.args.recipientMember ?? '')
+            .trim()
+            .replace(/^@/, '')
           const instruction = String(req.args.instruction ?? '').trim()
           const expectedResult = String(req.args.expectedResult ?? '').trim()
           if (!rawRecipient || !instruction) {
@@ -2278,11 +2397,18 @@ export class CollabEngine {
           }
 
           const targetMember = room.members.find(
-            (m) => m.removedAt === null && (m.id === rawRecipient || m.displayName.toLowerCase() === rawRecipient.toLowerCase())
+            (m) =>
+              m.removedAt === null &&
+              (m.id === rawRecipient || m.displayName.toLowerCase() === rawRecipient.toLowerCase())
           )
           if (!targetMember) {
-            const rosterNames = room.members.filter((m) => m.removedAt === null).map((m) => `@${m.displayName}`).join(', ')
-            return replyError(`Recipient "${rawRecipient}" is not in the fixed room roster (${rosterNames}). Ad-hoc subagents are forbidden.`)
+            const rosterNames = room.members
+              .filter((m) => m.removedAt === null)
+              .map((m) => `@${m.displayName}`)
+              .join(', ')
+            return replyError(
+              `Recipient "${rawRecipient}" is not in the fixed room roster (${rosterNames}). Ad-hoc subagents are forbidden.`
+            )
           }
           if (targetMember.id === callerMember.id) {
             return replyError('Cannot dispatch a subtask or transfer to yourself.')
@@ -2293,21 +2419,28 @@ export class CollabEngine {
             .prepare('SELECT * FROM work_nodes WHERE room_id = ? AND idempotency_key = ?')
             .get(req.roomId, toolIdemKey) as unknown as WorkNodeRow | undefined
           if (existingIdem) {
-            return { ok: true, output: `Already dispatched workNodeId=${existingIdem.id} to @${targetMember.displayName}.` }
+            return {
+              ok: true,
+              output: `Already dispatched workNodeId=${existingIdem.id} to @${targetMember.displayName}.`
+            }
           }
 
           const dispatchCount = this.database.db
             .prepare('SELECT COUNT(*) AS c FROM work_nodes WHERE root_node_id = ? AND parent_node_id IS NOT NULL')
             .get(callerRow.root_node_id) as { c: number }
           if ((dispatchCount?.c ?? 0) >= maxDispatches) {
-            return replyError(`Guardrail exceeded: maxDispatchesPerRoot (${maxDispatches}) reached. Summarize your work now.`)
+            return replyError(
+              `Guardrail exceeded: maxDispatchesPerRoot (${maxDispatches}) reached. Summarize your work now.`
+            )
           }
           if (callerRow.depth + 1 > maxDepth) {
             return replyError(`Guardrail exceeded: max node depth (${maxDepth}) reached.`)
           }
 
           const workspaceMode =
-            req.args.workspaceMode === 'read-only' || req.args.workspaceMode === 'shared-rw' || req.args.workspaceMode === 'worktree'
+            req.args.workspaceMode === 'read-only' ||
+            req.args.workspaceMode === 'shared-rw' ||
+            req.args.workspaceMode === 'worktree'
               ? (req.args.workspaceMode as WorkspaceMode)
               : ((room.strategyConfig?.defaultWorkspaceMode as WorkspaceMode) ?? 'shared-rw')
           const inheritFromId =
@@ -2385,7 +2518,9 @@ export class CollabEngine {
             }
 
             emittedNodes.push(
-              mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(childId) as unknown as WorkNodeRow)
+              mapNode(
+                this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(childId) as unknown as WorkNodeRow
+              )
             )
 
             if (mode === 'transfer') {
@@ -2399,7 +2534,11 @@ export class CollabEngine {
                 )
                 .run(childId, `Transferred to @${targetMember.displayName}`, now, now, callerRow.id)
               emittedNodes.push(
-                mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(callerRow.id) as unknown as WorkNodeRow)
+                mapNode(
+                  this.database.db
+                    .prepare('SELECT * FROM work_nodes WHERE id = ?')
+                    .get(callerRow.id) as unknown as WorkNodeRow
+                )
               )
               emittedMessages.push(
                 this.insertMessageTx(req.roomId, {
@@ -2418,7 +2557,9 @@ export class CollabEngine {
               )
             }
 
-            this.database.db.prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ? AND state != 'paused'").run(now, req.roomId)
+            this.database.db
+              .prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ? AND state != 'paused'")
+              .run(now, req.roomId)
             roomDirty = true
           })
 
@@ -2461,7 +2602,10 @@ export class CollabEngine {
           .prepare('SELECT * FROM work_nodes WHERE room_id = ? AND idempotency_key = ?')
           .get(req.roomId, toolIdemKey) as unknown as WorkNodeRow | undefined
         if (existingReply) {
-          return { ok: true, output: `Already created member_reply workNodeId=${existingReply.id} to @${targetMember.displayName}.` }
+          return {
+            ok: true,
+            output: `Already created member_reply workNodeId=${existingReply.id} to @${targetMember.displayName}.`
+          }
         }
 
         const replyCount = this.database.db
@@ -2501,9 +2645,15 @@ export class CollabEngine {
               now
             )
           emittedNodes.push(
-            mapNode(this.database.db.prepare('SELECT * FROM work_nodes WHERE id = ?').get(replyNodeId) as unknown as WorkNodeRow)
+            mapNode(
+              this.database.db
+                .prepare('SELECT * FROM work_nodes WHERE id = ?')
+                .get(replyNodeId) as unknown as WorkNodeRow
+            )
           )
-          this.database.db.prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ? AND state != 'paused'").run(now, req.roomId)
+          this.database.db
+            .prepare("UPDATE rooms SET state = 'running', updated_at = ? WHERE id = ? AND state != 'paused'")
+            .run(now, req.roomId)
         })
 
         for (const n of emittedNodes) this.events.workNodeUpdated(n)

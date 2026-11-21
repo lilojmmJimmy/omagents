@@ -1,4 +1,5 @@
 import type { ApprovalGate, Redactor, SecretProvider } from '@myagents/protocol'
+
 export { AgentEnvironmentIsolator as DefaultEnvironmentIsolator } from '../runtime/environment-isolator'
 
 export class DefaultSecretProvider implements SecretProvider {

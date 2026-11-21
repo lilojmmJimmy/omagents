@@ -131,16 +131,9 @@ export const WorkNodeStatus = z.enum([
 ])
 export type WorkNodeStatus = z.infer<typeof WorkNodeStatus>
 
-export const SETTLED_NODE_STATUSES: ReadonlySet<WorkNodeStatus> = new Set([
-  'completed',
-  'failed',
-  'cancelled'
-])
+export const SETTLED_NODE_STATUSES: ReadonlySet<WorkNodeStatus> = new Set(['completed', 'failed', 'cancelled'])
 
-export const LOCK_HOLDING_STATUSES: ReadonlySet<WorkNodeStatus> = new Set([
-  'starting',
-  'running'
-])
+export const LOCK_HOLDING_STATUSES: ReadonlySet<WorkNodeStatus> = new Set(['starting', 'running'])
 
 export const WorkNodeControlAction = z.enum(['stop', 'continue', 'cancel', 'retry', 'reassign'])
 export type WorkNodeControlAction = z.infer<typeof WorkNodeControlAction>
@@ -208,15 +201,7 @@ export const NodeEventSchema = z.object({
 })
 export type NodeEvent = z.infer<typeof NodeEventSchema>
 
-export const AgentSessionStatus = z.enum([
-  'cold',
-  'starting',
-  'ready',
-  'busy',
-  'hibernated',
-  'detached',
-  'crashed'
-])
+export const AgentSessionStatus = z.enum(['cold', 'starting', 'ready', 'busy', 'hibernated', 'detached', 'crashed'])
 export type AgentSessionStatus = z.infer<typeof AgentSessionStatus>
 
 export const TerminalSessionSchema = z.object({
@@ -233,10 +218,8 @@ export type TerminalSession = z.infer<typeof TerminalSessionSchema>
 
 export function pickLatestRetryableNode(nodes: readonly WorkNode[]): WorkNode | undefined {
   if (nodes.length === 0) return undefined
-  const supersededIds = new Set(
-    nodes.map((n) => n.supersedesNodeId).filter((id): id is string => Boolean(id))
-  )
-  const sorted = [...nodes].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.createdAt - a.createdAt))
+  const supersededIds = new Set(nodes.map((n) => n.supersedesNodeId).filter((id): id is string => Boolean(id)))
+  const sorted = [...nodes].sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt)
   const anchor = sorted[0]!
   const latestBatch = sorted.filter(
     (n) =>

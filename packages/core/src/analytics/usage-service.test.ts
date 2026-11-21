@@ -2,10 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { UsageAnalyticsService } from './usage-service'
 import { AgentService } from '../runtime/agent-service'
 import { CoreDatabase } from '../storage/database'
 import { WorkspaceService } from '../workspace/workspace-service'
+import { UsageAnalyticsService } from './usage-service'
 
 let tmpDir: string
 const prevHome = process.env.MYAGENTS_HOME
@@ -92,7 +92,14 @@ describe('UsageAnalyticsService (T-302)', () => {
       'mem-1',
       a1.id,
       'completed',
-      JSON.stringify({ model: 'gpt-5-codex', inputTokens: 1000, outputTokens: 500, costUsd: 0.02, durationMs: 2000, ttftMs: 400 }),
+      JSON.stringify({
+        model: 'gpt-5-codex',
+        inputTokens: 1000,
+        outputTokens: 500,
+        costUsd: 0.02,
+        durationMs: 2000,
+        ttftMs: 400
+      }),
       t2h,
       t2h + 2000,
       t2h,
@@ -124,7 +131,13 @@ describe('UsageAnalyticsService (T-302)', () => {
       'mem-2',
       a2.id,
       'completed',
-      JSON.stringify({ model: 'claude-sonnet-4', inputTokens: 4000, outputTokens: 1000, cacheReadTokens: 500, costUsd: 0.1 }),
+      JSON.stringify({
+        model: 'claude-sonnet-4',
+        inputTokens: 4000,
+        outputTokens: 1000,
+        cacheReadTokens: 500,
+        costUsd: 0.1
+      }),
       t20d,
       t20d + 3000,
       t20d,

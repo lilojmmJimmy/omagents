@@ -6,13 +6,13 @@ import { fileURLToPath } from 'node:url'
 import {
   createNdjsonParser,
   DAEMON_PROTOCOL_VERSION,
-  daemonEndpointPath,
-  DaemonEventSchema,
   type DaemonEvent,
+  DaemonEventSchema,
   type DaemonMethod,
   type DaemonParams,
   type DaemonResponseFrame,
-  type DaemonResult
+  type DaemonResult,
+  daemonEndpointPath
 } from '@myagents/protocol/node'
 
 type PendingCall = {

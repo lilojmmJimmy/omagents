@@ -23,10 +23,7 @@ export type McpServer = z.infer<typeof McpServerSchema>
 export const McpServerSaveInput = z
   .object({
     id: z.string().min(1).optional(),
-    name: z
-      .string()
-      .trim()
-      .regex(MCP_SERVER_NAME_RE, 'Server name must be 1-64 characters of letters, digits, _ or -'),
+    name: z.string().trim().regex(MCP_SERVER_NAME_RE, 'Server name must be 1-64 characters of letters, digits, _ or -'),
     transport: McpTransport,
     command: z.string().trim().optional(),
     args: z.array(z.string()).default([]),

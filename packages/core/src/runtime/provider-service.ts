@@ -46,13 +46,17 @@ export class ProviderService {
   }
 
   get(id: string): ModelProvider {
-    const row = this.database.db.prepare('SELECT * FROM model_providers WHERE id = ?').get(id) as unknown as ProviderRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM model_providers WHERE id = ?').get(id) as unknown as
+      | ProviderRow
+      | undefined
     if (!row) throw Errors.notFound(`Model provider not found: ${id}`)
     return mapProvider(row)
   }
 
   async resolveCredentials(id: string): Promise<{ provider: ModelProvider; apiKey: string | null }> {
-    const row = this.database.db.prepare('SELECT * FROM model_providers WHERE id = ?').get(id) as unknown as ProviderRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM model_providers WHERE id = ?').get(id) as unknown as
+      | ProviderRow
+      | undefined
     if (!row) throw Errors.notFound(`Model provider not found: ${id}`)
     const apiKey = row.api_key_ref ? await this.secrets.resolve(row.api_key_ref) : null
     return { provider: mapProvider(row), apiKey }
@@ -133,7 +137,10 @@ export class ProviderService {
       }
       const data = (await res.json()) as { data?: Array<{ id?: string }> }
       const models = Array.isArray(data?.data)
-        ? data.data.map((m) => m.id).filter((m): m is string => typeof m === 'string').slice(0, 100)
+        ? data.data
+            .map((m) => m.id)
+            .filter((m): m is string => typeof m === 'string')
+            .slice(0, 100)
         : undefined
       return { ok: true, latencyMs, models }
     } catch (err) {

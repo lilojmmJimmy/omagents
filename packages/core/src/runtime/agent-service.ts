@@ -76,9 +76,7 @@ export class AgentService {
     if (input.driverKind === 'builtin' && !input.providerId) {
       throw Errors.invalidParams('Builtin agent requires a model provider')
     }
-    const existing = this.database.db
-      .prepare('SELECT id FROM agents WHERE name = ? COLLATE NOCASE')
-      .get(input.name)
+    const existing = this.database.db.prepare('SELECT id FROM agents WHERE name = ? COLLATE NOCASE').get(input.name)
     if (existing) throw Errors.conflict('name_taken', `Agent name already exists: ${input.name}`)
 
     const id = randomUUID()

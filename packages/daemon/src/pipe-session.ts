@@ -1,7 +1,7 @@
 // Adapted from Antumi pipe-session (Apache License 2.0).
 import { spawn } from 'node:child_process'
 import os from 'node:os'
-import { cleanEnv, planLaunch, type DaemonParsedParams } from '@myagents/protocol/node'
+import { cleanEnv, type DaemonParsedParams, planLaunch } from '@myagents/protocol/node'
 import type { HostedProcess, ProcessEvents } from './session-host'
 
 const ignore = () => {}

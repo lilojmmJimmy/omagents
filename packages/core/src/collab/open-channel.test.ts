@@ -1,4 +1,4 @@
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -46,7 +46,9 @@ function startMockMultiAgentLlm(): Promise<{ server: http.Server; port: number }
             res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`)
           }
           const endStream = () => {
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { prompt_tokens: 80, completion_tokens: 20 } })}\n\n`)
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { prompt_tokens: 80, completion_tokens: 20 } })}\n\n`
+            )
             res.write('data: [DONE]\n\n')
             res.end()
           }
@@ -333,7 +335,10 @@ async function rpcCall(ws: WebSocket, id: string, method: string, params: Record
       const parsed = JSON.parse(raw.toString('utf8'))
       if (parsed.id !== id) return
       ws.off('message', onMsg)
-      if (parsed.error) reject(Object.assign(new Error(parsed.error.message), { code: parsed.error.code, reason: parsed.error.data?.reason }))
+      if (parsed.error)
+        reject(
+          Object.assign(new Error(parsed.error.message), { code: parsed.error.code, reason: parsed.error.data?.reason })
+        )
       else resolve(parsed.result)
     }
     ws.on('message', onMsg)
@@ -346,9 +351,7 @@ beforeAll(async () => {
   gitRepoDir = path.join(tmpHome, 'collab-repo')
   process.env.MYAGENTS_HOME = tmpHome
   daemonEndpoint =
-    process.platform === 'win32'
-      ? `\\\\.\\pipe\\myagents-oc-${Date.now()}`
-      : path.join(tmpHome, 'daemon.sock')
+    process.platform === 'win32' ? `\\\\.\\pipe\\myagents-oc-${Date.now()}` : path.join(tmpHome, 'daemon.sock')
 
   execFileSync('git', ['init', gitRepoDir], { windowsHide: true })
   execFileSync('git', ['config', 'user.email', 'test@myagents.local'], { cwd: gitRepoDir, windowsHide: true })
@@ -392,9 +395,39 @@ afterAll(() => {
 
 describe('parseLeadingMentions', () => {
   const members = [
-    { id: '1', roomId: 'r', agentId: 'a1', displayName: 'Claude', roleKind: 'lead' as const, rolePrompt: '', position: 0, joinedAt: 1, removedAt: null },
-    { id: '2', roomId: 'r', agentId: 'a2', displayName: 'Claude Lead', roleKind: 'member' as const, rolePrompt: '', position: 1, joinedAt: 1, removedAt: null },
-    { id: '3', roomId: 'r', agentId: 'a3', displayName: 'Reviewer!', roleKind: 'member' as const, rolePrompt: '', position: 2, joinedAt: 1, removedAt: null }
+    {
+      id: '1',
+      roomId: 'r',
+      agentId: 'a1',
+      displayName: 'Claude',
+      roleKind: 'lead' as const,
+      rolePrompt: '',
+      position: 0,
+      joinedAt: 1,
+      removedAt: null
+    },
+    {
+      id: '2',
+      roomId: 'r',
+      agentId: 'a2',
+      displayName: 'Claude Lead',
+      roleKind: 'member' as const,
+      rolePrompt: '',
+      position: 1,
+      joinedAt: 1,
+      removedAt: null
+    },
+    {
+      id: '3',
+      roomId: 'r',
+      agentId: 'a3',
+      displayName: 'Reviewer!',
+      roleKind: 'member' as const,
+      rolePrompt: '',
+      position: 2,
+      joinedAt: 1,
+      removedAt: null
+    }
   ]
 
   it('matches @everyone, case-insensitive longest prefix, and symbol-ending display names', () => {
@@ -532,7 +565,11 @@ describe('MyAgents v0.1b Open-Channel Multi-Agent Collaboration & Restart-Resili
       const timer = setTimeout(() => reject(new Error(`@everyone timeout; got=${fanoutMsgs.join(',')}`)), 15_000)
       const onMsg = (raw: WebSocket.RawData) => {
         const parsed = JSON.parse(raw.toString('utf8'))
-        if (parsed.method === 'room.messageCreated' && parsed.params.authorKind === 'agent' && String(parsed.params.content).startsWith('Ack from ')) {
+        if (
+          parsed.method === 'room.messageCreated' &&
+          parsed.params.authorKind === 'agent' &&
+          String(parsed.params.content).startsWith('Ack from ')
+        ) {
           fanoutMsgs.push(parsed.params.content)
           if (fanoutMsgs.length === 3) {
             clearTimeout(timer)
@@ -577,7 +614,10 @@ describe('MyAgents v0.1b Open-Channel Multi-Agent Collaboration & Restart-Resili
       const timer = setTimeout(() => reject(new Error('transfer timeout')), 15_000)
       const onMsg = (raw: WebSocket.RawData) => {
         const parsed = JSON.parse(raw.toString('utf8'))
-        if (parsed.method === 'room.messageCreated' && String(parsed.params.content).includes('Coder completed transfer.')) {
+        if (
+          parsed.method === 'room.messageCreated' &&
+          String(parsed.params.content).includes('Coder completed transfer.')
+        ) {
           clearTimeout(timer)
           ws.off('message', onMsg)
           resolve(parsed.params)

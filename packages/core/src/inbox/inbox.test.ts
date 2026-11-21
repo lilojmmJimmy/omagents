@@ -1,5 +1,5 @@
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -45,7 +45,9 @@ function startMockInboxLlm(): Promise<{ server: http.Server; port: number }> {
             res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`)
           }
           const endStream = () => {
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { prompt_tokens: 40, completion_tokens: 15 } })}\n\n`)
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { prompt_tokens: 40, completion_tokens: 15 } })}\n\n`
+            )
             res.write('data: [DONE]\n\n')
             res.end()
           }
@@ -133,9 +135,7 @@ beforeAll(async () => {
   gitRepoDir = path.join(tmpHome, 'inbox-repo')
   process.env.MYAGENTS_HOME = tmpHome
   daemonEndpoint =
-    process.platform === 'win32'
-      ? `\\\\.\\pipe\\myagents-inbox-${Date.now()}`
-      : path.join(tmpHome, 'daemon.sock')
+    process.platform === 'win32' ? `\\\\.\\pipe\\myagents-inbox-${Date.now()}` : path.join(tmpHome, 'daemon.sock')
 
   execFileSync('git', ['init', gitRepoDir], { windowsHide: true })
   execFileSync('git', ['config', 'user.email', 'test@myagents.local'], { cwd: gitRepoDir, windowsHide: true })
@@ -252,7 +252,8 @@ describe('MyAgents v0.1c Unified Inbox, Webhooks, Plugins, Routing & Lockdown', 
 
       const resolvedPromise = waitNotification(
         ws,
-        (method, params) => method === 'inbox.updated' && params.externalKey === 'evt-100' && params.status === 'resolved'
+        (method, params) =>
+          method === 'inbox.updated' && params.externalKey === 'evt-100' && params.status === 'resolved'
       )
 
       const okRes = await fetch(`http://127.0.0.1:${port}/webhooks/generic/${webhook.id}`, {
@@ -295,7 +296,9 @@ describe('MyAgents v0.1c Unified Inbox, Webhooks, Plugins, Routing & Lockdown', 
       // 2) Simulated tool call rejected by BuiltinDriver lockdown check, file NOT written to disk
       expect(existsSync(path.join(gitRepoDir, 'pwned.txt'))).toBe(false)
       const msgs = await rpcCall(ws, 'gm1', 'rooms.messages', { roomId: okJson.item.assignedRoomId })
-      expect(msgs.messages.some((m: any) => String(m.content).includes('Tool blocked in lockdown isolation mode'))).toBe(true)
+      expect(
+        msgs.messages.some((m: any) => String(m.content).includes('Tool blocked in lockdown isolation mode'))
+      ).toBe(true)
 
       attemptWriteLockdown = false
 

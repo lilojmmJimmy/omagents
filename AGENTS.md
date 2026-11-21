@@ -46,7 +46,7 @@ Layering rules:
 - **English Only (Mandatory)**: The project must strictly use English everywhere—code, identifiers, comments, UI copy, error messages, logs, tests, commit messages, and documentation. Never use any other language.
 - **Concise Comments**: Do not write comments for simple or self-explanatory code. Explain complex or non-obvious logic in one concise sentence.
 - **TypeScript Best Practices**: Adhere strictly to `strict: true`, `noUncheckedIndexedAccess: true`, and `verbatimModuleSyntax: true` (use `import type` for type-only imports). Validate external boundaries (HTTP, RPC, WebSocket, Daemon NDJSON, Webhooks) with Zod schemas and avoid `any`.
-- **Formatting & Conventions**: Use 2-space indentation, single quotes, no semicolons, ES modules, and structured errors via `Errors.*` in `core`.
+- **Formatting & Conventions**: Use Biome (`biome.json`) and `.editorconfig` enforcing 2-space indentation, LF line endings, single quotes (double JSX quotes), no semicolons, no trailing commas, ES modules, and structured errors via `Errors.*` in `core`.
 - **Cross-Platform Safety**: Handle Windows and POSIX differences cleanly; launch external CLIs through `planLaunch` instead of `shell: true`.
 
 ## 4. Security & Isolation
@@ -63,9 +63,13 @@ Layering rules:
 
 ## 6. Verification
 
-Run from the repository root (note: this repository has no standalone formatter or linter configured beyond TypeScript `tsc -p .` and Vite build):
+Run from the repository root (`biome.json` provides linting, formatting, and import organization alongside TypeScript `tsc -p .` and Vite build):
 
 ```bash
+pnpm run check
+pnpm run check:fix
+pnpm run lint
+pnpm run format
 pnpm run typecheck
 pnpm run build
 pnpm vitest run <path/to/file.test.ts>

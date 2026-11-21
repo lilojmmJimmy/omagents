@@ -8,11 +8,7 @@ export interface BuiltTurnContext {
   contextHistoryMessages: RoomMessage[]
 }
 
-function getMemberDisplayLabel(
-  member: RoomMember,
-  anonymous: boolean,
-  aliasById: Map<string, string>
-): string {
+function getMemberDisplayLabel(member: RoomMember, anonymous: boolean, aliasById: Map<string, string>): string {
   return anonymous ? (aliasById.get(member.id) ?? 'Member') : member.displayName
 }
 
@@ -22,10 +18,7 @@ function formatMessageLine(
   anonymous: boolean,
   activeMembers: RoomMember[]
 ): string {
-  let author =
-    msg.authorKind === 'agent'
-      ? (labelById.get(msg.authorId) ?? msg.authorName)
-      : msg.authorName
+  let author = msg.authorKind === 'agent' ? (labelById.get(msg.authorId) ?? msg.authorName) : msg.authorName
   let content = msg.content
   if (anonymous) {
     if (msg.authorKind === 'agent' && labelById.has(msg.authorId)) {
@@ -57,7 +50,16 @@ export function buildTurnContext(opts: {
   lastDeliveredSeq: number
   allowedCollabTools: readonly CollabToolName[]
 }): BuiltTurnContext {
-  const { room, member, node, visibleMessages, pendingDeliveryText, isIncremental, lastDeliveredSeq, allowedCollabTools } = opts
+  const {
+    room,
+    member,
+    node,
+    visibleMessages,
+    pendingDeliveryText,
+    isIncremental,
+    lastDeliveredSeq,
+    allowedCollabTools
+  } = opts
   const isMultiAgent = room.strategyId !== 'single'
 
   // Single-agent rooms without deliveries keep lightweight clean prompts
@@ -72,7 +74,10 @@ export function buildTurnContext(opts: {
   const activeMembers = [...room.members.filter((m) => m.removedAt === null)].sort((a, b) => a.position - b.position)
   const labelById = new Map<string, string>()
   activeMembers.forEach((m, idx) => {
-    labelById.set(m.id, anonymous ? `Member ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? idx - 25 : ''}` : m.displayName)
+    labelById.set(
+      m.id,
+      anonymous ? `Member ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? idx - 25 : ''}` : m.displayName
+    )
   })
 
   const selfLabel = getMemberDisplayLabel(member, anonymous, labelById)

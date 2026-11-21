@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { AlertTriangle, CheckCircle2, HardDrive, KeyRound, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react'
 import type { BlobPurgeResult, BlobStorageSummary } from '@myagents/protocol'
+import { AlertTriangle, CheckCircle2, HardDrive, KeyRound, Plus, RefreshCw, Trash2, X, XCircle } from 'lucide-react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { apiChangePassword, rpc } from '../api/rpc-client'
 import { useAppStore } from '../store/app-store'
 
@@ -95,10 +95,15 @@ export function SettingsView() {
 
   const probeProvider = async (id: string) => {
     setProbeResult((s) => ({ ...s, [id]: 'Probing...' }))
-    const res = await rpc.call<{ ok: boolean; latencyMs: number; models?: string[]; error?: string }>('providers.probe', { id })
+    const res = await rpc.call<{ ok: boolean; latencyMs: number; models?: string[]; error?: string }>(
+      'providers.probe',
+      { id }
+    )
     setProbeResult((s) => ({
       ...s,
-      [id]: res.ok ? `Connected (${res.latencyMs}ms${res.models ? `, ${res.models.length} models` : ''})` : `Failed: ${res.error}`
+      [id]: res.ok
+        ? `Connected (${res.latencyMs}ms${res.models ? `, ${res.models.length} models` : ''})`
+        : `Failed: ${res.error}`
     }))
   }
 
@@ -135,7 +140,11 @@ export function SettingsView() {
         <section className="bg-white border border-[#e5e5e5] rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium text-[#111]">External Runtime Diagnostics</h2>
-            <button type="button" onClick={() => void refreshEnv()} className="flex items-center gap-1 text-xs text-[#666] hover:text-[#111] cursor-pointer">
+            <button
+              type="button"
+              onClick={() => void refreshEnv()}
+              className="flex items-center gap-1 text-xs text-[#666] hover:text-[#111] cursor-pointer"
+            >
               <RefreshCw size={12} />
               <span>Re-check</span>
             </button>
@@ -144,7 +153,11 @@ export function SettingsView() {
             {[envCheck?.git, ...(envCheck?.clis ?? [])].filter(Boolean).map((item) => (
               <div key={item!.kind} className="py-2 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  {item!.ready ? <CheckCircle2 size={14} className="text-green-600" /> : <XCircle size={14} className="text-red-500" />}
+                  {item!.ready ? (
+                    <CheckCircle2 size={14} className="text-green-600" />
+                  ) : (
+                    <XCircle size={14} className="text-red-500" />
+                  )}
                   <span className="font-mono font-medium">{item!.kind}</span>
                   <span className="text-[#666]">{item!.version || item!.problem || 'Not installed'}</span>
                 </div>
@@ -188,7 +201,10 @@ export function SettingsView() {
             />
             {pError && <div className="col-span-2 text-red-600">{pError}</div>}
             <div className="col-span-2 flex justify-end">
-              <button type="submit" className="flex items-center gap-1 px-3 py-1.5 bg-[#c2542d] text-white rounded-lg font-medium cursor-pointer">
+              <button
+                type="submit"
+                className="flex items-center gap-1 px-3 py-1.5 bg-[#c2542d] text-white rounded-lg font-medium cursor-pointer"
+              >
                 <Plus size={13} />
                 <span>Add Provider</span>
               </button>
@@ -200,7 +216,10 @@ export function SettingsView() {
               <div className="text-xs text-[#999] text-center py-3">No model providers configured yet</div>
             ) : (
               providers.map((p) => (
-                <div key={p.id} className="border border-[#eee] rounded-lg p-3 flex items-center justify-between text-xs">
+                <div
+                  key={p.id}
+                  className="border border-[#eee] rounded-lg p-3 flex items-center justify-between text-xs"
+                >
                   <div className="space-y-0.5 min-w-0">
                     <div className="font-medium text-[#111]">
                       {p.name} <span className="font-mono text-[#666] ml-1">({p.defaultModel})</span>
@@ -216,7 +235,11 @@ export function SettingsView() {
                     >
                       Test Connection
                     </button>
-                    <button type="button" onClick={() => void deleteProvider(p.id)} className="p-1 text-[#888] hover:text-red-600 cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => void deleteProvider(p.id)}
+                      className="p-1 text-[#888] hover:text-red-600 cursor-pointer"
+                    >
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -249,7 +272,10 @@ export function SettingsView() {
               placeholder="New password (at least 4 characters)"
               className="px-2.5 py-1.5 text-sm border border-[#dcdcdc] rounded-lg"
             />
-            <button type="submit" className="px-3 py-1.5 text-xs font-medium bg-[#111] text-white rounded-lg cursor-pointer">
+            <button
+              type="submit"
+              className="px-3 py-1.5 text-xs font-medium bg-[#111] text-white rounded-lg cursor-pointer"
+            >
               Update Password
             </button>
           </form>
@@ -274,9 +300,7 @@ export function SettingsView() {
               </button>
               <button
                 type="button"
-                disabled={
-                  !blobSummary || (blobSummary.unreferencedFiles === 0 && blobSummary.outboxPendingCount === 0)
-                }
+                disabled={!blobSummary || (blobSummary.unreferencedFiles === 0 && blobSummary.outboxPendingCount === 0)}
                 onClick={openPurgeModal}
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-40 cursor-pointer"
               >
@@ -287,13 +311,12 @@ export function SettingsView() {
           </div>
 
           <p className="text-xs text-[#666]">
-            Chat and inbox attachments are deduplicated by SHA-256 on disk. Unused blobs from deleted rooms or inbox tickets remain until you explicitly remove them here.
+            Chat and inbox attachments are deduplicated by SHA-256 on disk. Unused blobs from deleted rooms or inbox
+            tickets remain until you explicitly remove them here.
           </p>
 
           {blobError && (
-            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {blobError}
-            </div>
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{blobError}</div>
           )}
 
           {purgeResult && (
@@ -376,13 +399,13 @@ export function SettingsView() {
 
             <div className="space-y-2 text-[#444]">
               <p>
-                This action will permanently remove{' '}
-                <strong>{blobSummary.unreferencedFiles}</strong> unreferenced file record(s) and{' '}
-                <strong>{blobSummary.outboxPendingCount}</strong> queued deletion entry(ies), freeing up to{' '}
-                <strong className="font-mono">{formatBytes(blobSummary.unreferencedBytes)}</strong> from disk.
+                This action will permanently remove <strong>{blobSummary.unreferencedFiles}</strong> unreferenced file
+                record(s) and <strong>{blobSummary.outboxPendingCount}</strong> queued deletion entry(ies), freeing up
+                to <strong className="font-mono">{formatBytes(blobSummary.unreferencedBytes)}</strong> from disk.
               </p>
               <p className="text-[#666]">
-                Files still referenced by existing chat messages or inbox items will NOT be touched. Deleted blobs cannot be recovered.
+                Files still referenced by existing chat messages or inbox items will NOT be touched. Deleted blobs
+                cannot be recovered.
               </p>
             </div>
 

@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import {
+  type Dirent,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  type Stats,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -76,7 +78,9 @@ export class WorkspaceService {
   }
 
   get(id: string): Workspace {
-    const row = this.database.db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as unknown as WorkspaceRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as unknown as
+      | WorkspaceRow
+      | undefined
     if (!row) throw Errors.notFound(`Workspace not found: ${id}`)
     return mapWorkspace(row)
   }
@@ -122,8 +126,17 @@ export class WorkspaceService {
       const probe = await probeGitRepo(resolved)
       const now = Date.now()
       this.database.db
-        .prepare('UPDATE workspaces SET name = ?, is_git = ?, git_common_dir = ?, git_branch = ?, cleaned_at = NULL, updated_at = ? WHERE id = ?')
-        .run(input.name?.trim() || existing.name, Number(probe.isGit), probe.gitCommonDir, probe.branch, now, existing.id)
+        .prepare(
+          'UPDATE workspaces SET name = ?, is_git = ?, git_common_dir = ?, git_branch = ?, cleaned_at = NULL, updated_at = ? WHERE id = ?'
+        )
+        .run(
+          input.name?.trim() || existing.name,
+          Number(probe.isGit),
+          probe.gitCommonDir,
+          probe.branch,
+          now,
+          existing.id
+        )
       return this.get(existing.id)
     }
 
@@ -271,7 +284,7 @@ export class WorkspaceService {
       for (const entry of entries) {
         if (IGNORED_DIRS.has(entry.name)) continue
         const full = path.join(dir, entry.name)
-        let st
+        let st: Stats
         try {
           st = statSync(full)
         } catch {
@@ -290,7 +303,10 @@ export class WorkspaceService {
     return walk(absDir, 1)
   }
 
-  readFile(workspaceId: string, relPath: string): { content: string; encoding: 'utf8' | 'base64'; size: number; mtimeMs: number; binary: boolean } {
+  readFile(
+    workspaceId: string,
+    relPath: string
+  ): { content: string; encoding: 'utf8' | 'base64'; size: number; mtimeMs: number; binary: boolean } {
     const ws = this.get(workspaceId)
     const abs = resolveContainedPath(ws.rootPath, relPath)
     if (!existsSync(abs) || !statSync(abs).isFile()) {
@@ -313,7 +329,12 @@ export class WorkspaceService {
     }
   }
 
-  writeFile(workspaceId: string, relPath: string, content: string, expectedMtimeMs?: number): { ok: true; mtimeMs: number } {
+  writeFile(
+    workspaceId: string,
+    relPath: string,
+    content: string,
+    expectedMtimeMs?: number
+  ): { ok: true; mtimeMs: number } {
     const ws = this.get(workspaceId)
     const abs = resolveContainedPath(ws.rootPath, relPath)
     if (expectedMtimeMs !== undefined && existsSync(abs)) {
@@ -328,7 +349,11 @@ export class WorkspaceService {
     return { ok: true, mtimeMs: nextMtime }
   }
 
-  writeBinaryFile(workspaceId: string, relPath: string, data: Buffer): { ok: true; path: string; size: number; mtimeMs: number } {
+  writeBinaryFile(
+    workspaceId: string,
+    relPath: string,
+    data: Buffer
+  ): { ok: true; path: string; size: number; mtimeMs: number } {
     const ws = this.get(workspaceId)
     const abs = resolveContainedPath(ws.rootPath, relPath)
     mkdirSync(path.dirname(abs), { recursive: true })
@@ -365,7 +390,12 @@ export class WorkspaceService {
     return { ok: true }
   }
 
-  grep(workspaceId: string, pattern: string, relDir = '', limit = 50): Array<{ path: string; line: number; text: string }> {
+  grep(
+    workspaceId: string,
+    pattern: string,
+    relDir = '',
+    limit = 50
+  ): Array<{ path: string; line: number; text: string }> {
     const ws = this.get(workspaceId)
     const absDir = resolveContainedPath(ws.rootPath, relDir)
     const regex = new RegExp(pattern, 'i')
@@ -373,7 +403,7 @@ export class WorkspaceService {
 
     const walk = (dir: string) => {
       if (hits.length >= limit) return
-      let entries
+      let entries: Dirent[]
       try {
         entries = readdirSync(dir, { withFileTypes: true })
       } catch {

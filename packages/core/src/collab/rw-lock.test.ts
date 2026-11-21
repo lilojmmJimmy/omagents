@@ -4,8 +4,18 @@ import { buildNodeClaims, ResourceLockManager } from './rw-lock'
 describe('ResourceLockManager (Writer-Preferring RWLock)', () => {
   it('allows concurrent readers on the same workspace for different members', () => {
     const locks = new ResourceLockManager()
-    const c1 = buildNodeClaims({ memberId: 'm1', workspacePath: '/repo/app', workspaceMode: 'read-only', extraResources: [] })
-    const c2 = buildNodeClaims({ memberId: 'm2', workspacePath: '/repo/app', workspaceMode: 'read-only', extraResources: [] })
+    const c1 = buildNodeClaims({
+      memberId: 'm1',
+      workspacePath: '/repo/app',
+      workspaceMode: 'read-only',
+      extraResources: []
+    })
+    const c2 = buildNodeClaims({
+      memberId: 'm2',
+      workspacePath: '/repo/app',
+      workspaceMode: 'read-only',
+      extraResources: []
+    })
 
     expect(locks.canAcquire(c1)).toBe(true)
     locks.acquire('n1', c1)
@@ -14,8 +24,18 @@ describe('ResourceLockManager (Writer-Preferring RWLock)', () => {
 
   it('enforces strict single-seat serialization for same memberId', () => {
     const locks = new ResourceLockManager()
-    const c1 = buildNodeClaims({ memberId: 'm1', workspacePath: '/repo/app', workspaceMode: 'read-only', extraResources: [] })
-    const c2 = buildNodeClaims({ memberId: 'm1', workspacePath: '/repo/other', workspaceMode: 'read-only', extraResources: [] })
+    const c1 = buildNodeClaims({
+      memberId: 'm1',
+      workspacePath: '/repo/app',
+      workspaceMode: 'read-only',
+      extraResources: []
+    })
+    const c2 = buildNodeClaims({
+      memberId: 'm1',
+      workspacePath: '/repo/other',
+      workspaceMode: 'read-only',
+      extraResources: []
+    })
 
     locks.acquire('n1', c1)
     expect(locks.canAcquire(c2)).toBe(false)
@@ -25,9 +45,24 @@ describe('ResourceLockManager (Writer-Preferring RWLock)', () => {
 
   it('blocks overlapping ancestor/child workspace writes and prevents writer starvation', () => {
     const locks = new ResourceLockManager()
-    const reader1 = buildNodeClaims({ memberId: 'm1', workspacePath: '/repo/app/src', workspaceMode: 'read-only', extraResources: [] })
-    const writer = buildNodeClaims({ memberId: 'm2', workspacePath: '/repo/app', workspaceMode: 'shared-rw', extraResources: [] })
-    const reader2 = buildNodeClaims({ memberId: 'm3', workspacePath: '/repo/app/docs', workspaceMode: 'read-only', extraResources: [] })
+    const reader1 = buildNodeClaims({
+      memberId: 'm1',
+      workspacePath: '/repo/app/src',
+      workspaceMode: 'read-only',
+      extraResources: []
+    })
+    const writer = buildNodeClaims({
+      memberId: 'm2',
+      workspacePath: '/repo/app',
+      workspaceMode: 'shared-rw',
+      extraResources: []
+    })
+    const reader2 = buildNodeClaims({
+      memberId: 'm3',
+      workspacePath: '/repo/app/docs',
+      workspaceMode: 'read-only',
+      extraResources: []
+    })
 
     locks.acquire('n1', reader1)
     // Writer cannot acquire while reader holds overlapping subpath

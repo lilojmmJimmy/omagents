@@ -1,13 +1,13 @@
 import {
   COLLAB_TOOLS,
-  WorkspaceMode,
   type CollabStrategy,
   type EngineAction,
   type RoomControlAction,
   type RoomMember,
   type RoomMessage,
   type RoomSnapshot,
-  type WorkNode
+  type WorkNode,
+  WorkspaceMode
 } from '@myagents/protocol'
 import { z } from 'zod'
 
@@ -76,7 +76,8 @@ export function parseLeadingMentions(
 export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelState> = {
   id: 'open-channel',
   label: 'Open Channel',
-  description: 'Fixed-roster multi-agent collaboration group supporting @member/@everyone deterministic routing, task delegation/transfer, Git worktree isolation, and manual intervention.',
+  description:
+    'Fixed-roster multi-agent collaboration group supporting @member/@everyone deterministic routing, task delegation/transfer, Git worktree isolation, and manual intervention.',
   executionModel: 'event-driven',
   configSchema: OpenChannelConfigSchema,
   allowedTools: COLLAB_TOOLS,
@@ -100,7 +101,9 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
   onHumanMessage(ctx: RoomSnapshot<OpenChannelConfig, OpenChannelState>, msg: RoomMessage): EngineAction[] {
     const active = ctx.members.filter((m) => m.removedAt === null)
     if (active.length === 0) {
-      return [{ type: 'post_system', text: 'No active member available in this collaboration room.', kind: 'system_notice' }]
+      return [
+        { type: 'post_system', text: 'No active member available in this collaboration room.', kind: 'system_notice' }
+      ]
     }
 
     const wsMode = ctx.config.defaultWorkspaceMode ?? 'shared-rw'
@@ -167,10 +170,7 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
     }
 
     // 5 & 6. Single active member or deterministic Lead fallback (first position fallback if no explicit lead)
-    const target =
-      active.length === 1
-        ? active[0]!
-        : (active.find((m) => m.roleKind === 'lead') ?? active[0]!)
+    const target = active.length === 1 ? active[0]! : (active.find((m) => m.roleKind === 'lead') ?? active[0]!)
 
     return [
       {
@@ -193,7 +193,8 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
     if (node.kind === 'member_reply' && (tool === 'collab_dispatch' || tool === 'collab_reply')) {
       return {
         ok: false,
-        reason: 'Reply turns (member_reply) are single-turn responses and cannot invoke collab_dispatch or collab_reply.'
+        reason:
+          'Reply turns (member_reply) are single-turn responses and cannot invoke collab_dispatch or collab_reply.'
       }
     }
     return { ok: true }
@@ -201,7 +202,9 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
 
   onNodeSettled(ctx: RoomSnapshot<OpenChannelConfig, OpenChannelState>, node: WorkNode): EngineAction[] {
     const stillActive = ctx.activeNodes.some(
-      (n) => n.id !== node.id && ['queued', 'waiting_deps', 'waiting_lock', 'starting', 'running', 'waiting_children'].includes(n.status)
+      (n) =>
+        n.id !== node.id &&
+        ['queued', 'waiting_deps', 'waiting_lock', 'starting', 'running', 'waiting_children'].includes(n.status)
     )
     const actions: EngineAction[] = []
     if (node.status === 'completed') {
@@ -221,7 +224,9 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
       ]
     }
     if (action === 'resume') {
-      const hasRunning = ctx.activeNodes.some((n) => ['queued', 'starting', 'running', 'waiting_children'].includes(n.status))
+      const hasRunning = ctx.activeNodes.some((n) =>
+        ['queued', 'starting', 'running', 'waiting_children'].includes(n.status)
+      )
       return [
         { type: 'set_room_state', state: hasRunning ? 'running' : 'active' },
         { type: 'post_system', text: 'Collaboration room resumed.', kind: 'routing_notice' }
@@ -232,7 +237,9 @@ export const openChannelStrategy: CollabStrategy<OpenChannelConfig, OpenChannelS
         .filter((n) => !['completed', 'failed', 'cancelled'].includes(n.status))
         .map((n) => n.id)
       return [
-        ...(cancelIds.length > 0 ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'stopped_by_user' }] : []),
+        ...(cancelIds.length > 0
+          ? [{ type: 'cancel_nodes' as const, nodeIds: cancelIds, reason: 'stopped_by_user' }]
+          : []),
         { type: 'set_room_state', state: 'active' },
         { type: 'post_system', text: 'Stopped all active tasks in this collaboration room.', kind: 'routing_notice' }
       ]

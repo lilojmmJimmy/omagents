@@ -135,12 +135,19 @@ export class RpcClient {
 
 export const rpc = new RpcClient()
 
-export async function apiAuthMe(): Promise<{ authenticated: boolean; username?: string; defaultPasswordWarning?: boolean }> {
+export async function apiAuthMe(): Promise<{
+  authenticated: boolean
+  username?: string
+  defaultPasswordWarning?: boolean
+}> {
   const res = await fetch('/api/auth/me')
   return (await res.json()) as any
 }
 
-export async function apiLogin(username: string, password: string): Promise<{ ok: boolean; username: string; defaultPasswordWarning?: boolean }> {
+export async function apiLogin(
+  username: string,
+  password: string
+): Promise<{ ok: boolean; username: string; defaultPasswordWarning?: boolean }> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -165,7 +172,11 @@ export async function apiChangePassword(oldPassword: string, newPassword: string
   if (!res.ok) throw new Error(data?.message || 'Failed to change password')
 }
 
-export async function apiUploadWorkspaceFile(workspaceId: string, dir: string, file: File): Promise<{ path: string; size: number }> {
+export async function apiUploadWorkspaceFile(
+  workspaceId: string,
+  dir: string,
+  file: File
+): Promise<{ path: string; size: number }> {
   const fd = new FormData()
   fd.append('file', file)
   const qs = dir ? `?dir=${encodeURIComponent(dir)}` : ''

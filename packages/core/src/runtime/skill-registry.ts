@@ -73,7 +73,9 @@ function findSkillMarkdownFile(targetPath: string): string | null {
     const p = path.join(targetPath, candidate)
     if (existsSync(p) && statSync(p).isFile()) return p
   }
-  const mdFile = readdirSync(targetPath).find((entry) => /\.md$/i.test(entry) && statSync(path.join(targetPath, entry)).isFile())
+  const mdFile = readdirSync(targetPath).find(
+    (entry) => /\.md$/i.test(entry) && statSync(path.join(targetPath, entry)).isFile()
+  )
   return mdFile ? path.join(targetPath, mdFile) : null
 }
 
@@ -88,7 +90,9 @@ function assertSafeGitSource(sourceUri: string): string {
   if (existsSync(resolved) && statSync(resolved).isDirectory()) {
     return resolved
   }
-  throw Errors.invalidParams('Git skill source must be https://, http://, ssh://, git@, file://, or an existing local directory')
+  throw Errors.invalidParams(
+    'Git skill source must be https://, http://, ssh://, git@, file://, or an existing local directory'
+  )
 }
 
 async function runGit(args: string[], cwd: string): Promise<string> {
@@ -113,9 +117,7 @@ export class SkillRegistryService {
   }
 
   get(id: string): Skill {
-    const row = this.database.db
-      .prepare('SELECT * FROM skills WHERE id = ?')
-      .get(id) as unknown as SkillRow | undefined
+    const row = this.database.db.prepare('SELECT * FROM skills WHERE id = ?').get(id) as unknown as SkillRow | undefined
     if (!row) throw Errors.notFound(`Skill not found: ${id}`)
     return mapSkill(row)
   }
@@ -165,9 +167,7 @@ export class SkillRegistryService {
         throw Errors.invalidParams('Unable to determine skill name')
       }
 
-      const dup = this.database.db
-        .prepare('SELECT id FROM skills WHERE LOWER(name) = LOWER(?)')
-        .get(derivedName)
+      const dup = this.database.db.prepare('SELECT id FROM skills WHERE LOWER(name) = LOWER(?)').get(derivedName)
       if (dup) {
         throw Errors.conflict('name_taken', `Skill name already exists: ${derivedName}`)
       }
@@ -179,17 +179,7 @@ export class SkillRegistryService {
           `INSERT INTO skills (id, name, source_type, source_uri, pinned_commit, local_path, description, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(
-          id,
-          derivedName,
-          input.sourceType,
-          input.sourceUri.trim(),
-          pinnedCommit,
-          localPath,
-          description,
-          now,
-          now
-        )
+        .run(id, derivedName, input.sourceType, input.sourceUri.trim(), pinnedCommit, localPath, description, now, now)
 
       clonedDirToCleanup = null
       return this.get(id)
@@ -206,9 +196,10 @@ export class SkillRegistryService {
       const info = this.database.db.prepare('DELETE FROM skills WHERE id = ?').run(id)
       if (info.changes === 0) throw Errors.notFound(`Skill not found: ${id}`)
 
-      const agentRows = this.database.db
-        .prepare('SELECT id, skill_ids_json FROM agents')
-        .all() as Array<{ id: string; skill_ids_json: string }>
+      const agentRows = this.database.db.prepare('SELECT id, skill_ids_json FROM agents').all() as Array<{
+        id: string
+        skill_ids_json: string
+      }>
       const now = Date.now()
       for (const agent of agentRows) {
         const ids = JSON.parse(agent.skill_ids_json || '[]') as string[]
@@ -242,9 +233,9 @@ export class SkillRegistryService {
     const sections: string[] = []
     let remaining = MAX_TOTAL_SKILLS_CHARS
     for (const id of uniqueIds) {
-      const row = this.database.db
-        .prepare('SELECT * FROM skills WHERE id = ?')
-        .get(id) as unknown as SkillRow | undefined
+      const row = this.database.db.prepare('SELECT * FROM skills WHERE id = ?').get(id) as unknown as
+        | SkillRow
+        | undefined
       if (!row) continue
       const mdPath = findSkillMarkdownFile(row.local_path)
       if (!mdPath) continue

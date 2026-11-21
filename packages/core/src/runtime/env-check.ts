@@ -13,7 +13,10 @@ export interface CliCheckResult {
   problem?: string
 }
 
-async function probeCommand(command: string, args: string[]): Promise<{ installed: boolean; path: string | null; version: string | null; problem?: string }> {
+async function probeCommand(
+  command: string,
+  args: string[]
+): Promise<{ installed: boolean; path: string | null; version: string | null; problem?: string }> {
   const resolved = resolveCommand(command, process.cwd(), process.env)
   if (!resolved) return { installed: false, path: null, version: null, problem: 'not-installed' }
   try {
@@ -23,7 +26,11 @@ async function probeCommand(command: string, args: string[]): Promise<{ installe
       timeout: 8000,
       windowsHide: true
     })
-    const line = (stdout || stderr).split(/\r?\n/).find((l) => l.trim())?.trim() || null
+    const line =
+      (stdout || stderr)
+        .split(/\r?\n/)
+        .find((l) => l.trim())
+        ?.trim() || null
     return { installed: true, path: resolved, version: line }
   } catch (err) {
     return {

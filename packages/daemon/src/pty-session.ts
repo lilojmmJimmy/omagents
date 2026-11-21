@@ -1,6 +1,7 @@
 // Adapted from Antumi pty-session (Apache License 2.0).
+
+import { type DaemonParsedParams, planLaunch } from '@myagents/protocol/node'
 import * as pty from 'node-pty'
-import { planLaunch, type DaemonParsedParams } from '@myagents/protocol/node'
 import type { HostedProcess, ProcessEvents } from './session-host'
 
 type PtyLaunch = Omit<DaemonParsedParams<'spawnPty'>, 'cols' | 'rows'>

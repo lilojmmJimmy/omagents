@@ -1,4 +1,4 @@
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
@@ -60,13 +60,19 @@ function startMockLlm(): Promise<{ server: http.Server; port: number }> {
                 index: 0,
                 id: 'tc_write',
                 type: 'function',
-                function: { name: 'workspace_write', arguments: JSON.stringify({ path: 'app.txt', content: 'hello world\nline two\n' }) }
+                function: {
+                  name: 'workspace_write',
+                  arguments: JSON.stringify({ path: 'app.txt', content: 'hello world\nline two\n' })
+                }
               },
               {
                 index: 1,
                 id: 'tc_patch',
                 type: 'function',
-                function: { name: 'workspace_patch', arguments: JSON.stringify({ path: 'app.txt', oldText: 'world', newText: 'myagents' }) }
+                function: {
+                  name: 'workspace_patch',
+                  arguments: JSON.stringify({ path: 'app.txt', oldText: 'world', newText: 'myagents' })
+                }
               },
               {
                 index: 2,
@@ -96,16 +102,23 @@ function startMockLlm(): Promise<{ server: http.Server; port: number }> {
                 index: 6,
                 id: 'tc_exec',
                 type: 'function',
-                function: { name: 'workspace_exec', arguments: JSON.stringify({ command: 'node', args: ['-e', 'console.log(21*2)'] }) }
+                function: {
+                  name: 'workspace_exec',
+                  arguments: JSON.stringify({ command: 'node', args: ['-e', 'console.log(21*2)'] })
+                }
               }
             ]
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Planning workspace tools...' } }] })}\n\n`)
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Planning workspace tools...' } }] })}\n\n`
+            )
             res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: calls } }] })}\n\n`)
             res.write('data: [DONE]\n\n')
             res.end()
           } else {
             const summary = `All ${toolMessages.length} tools completed. Exec output: ${toolMessages[toolMessages.length - 1]?.content?.trim()}`
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: '<think>Verifying tool outputs.</think>' } }] })}\n\n`)
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: { content: '<think>Verifying tool outputs.</think>' } }] })}\n\n`
+            )
             res.write(
               `data: ${JSON.stringify({
                 choices: [{ delta: { content: summary } }],
@@ -138,7 +151,10 @@ async function rpcCall(ws: WebSocket, id: string, method: string, params: Record
       const parsed = JSON.parse(raw.toString('utf8'))
       if (parsed.id !== id) return
       ws.off('message', onMsg)
-      if (parsed.error) reject(Object.assign(new Error(parsed.error.message), { code: parsed.error.code, reason: parsed.error.data?.reason }))
+      if (parsed.error)
+        reject(
+          Object.assign(new Error(parsed.error.message), { code: parsed.error.code, reason: parsed.error.data?.reason })
+        )
       else resolve(parsed.result)
     }
     ws.on('message', onMsg)
@@ -151,9 +167,7 @@ beforeAll(async () => {
   gitRepoDir = path.join(tmpHome, 'sample-git-repo')
   process.env.MYAGENTS_HOME = tmpHome
   daemonEndpoint =
-    process.platform === 'win32'
-      ? `\\\\.\\pipe\\myagents-acc-${Date.now()}`
-      : path.join(tmpHome, 'daemon.sock')
+    process.platform === 'win32' ? `\\\\.\\pipe\\myagents-acc-${Date.now()}` : path.join(tmpHome, 'daemon.sock')
 
   // Create a real local git repository for Git Diff & Project Workspace tests
   execFileSync('git', ['init', gitRepoDir], { windowsHide: true })
@@ -243,7 +257,11 @@ describe('MyAgents v0.1a Extended Acceptance (All Tools, Upload/Download, Git Di
     expect(dlRes.status).toBe(200)
     expect(await dlRes.text()).toBe('uploaded-hello-123')
 
-    await rpcCall(ws, 'f2', 'files.rename', { workspaceId: proj.id, path: 'docs/upload.txt', newPath: 'docs/renamed.txt' })
+    await rpcCall(ws, 'f2', 'files.rename', {
+      workspaceId: proj.id,
+      path: 'docs/upload.txt',
+      newPath: 'docs/renamed.txt'
+    })
     await rpcCall(ws, 'f3', 'files.remove', { workspaceId: proj.id, path: 'docs/renamed.txt' })
 
     // 2. Builtin Agent executes ALL 7 workspace_* tools against Git project

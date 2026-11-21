@@ -1,8 +1,8 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { startCoreServer } from '../packages/core/src/main.ts'
 
@@ -13,9 +13,7 @@ const tmpHome = mkdtempSync(path.join(os.tmpdir(), 'myagents-claude-live-'))
 const gitRepoDir = path.join(tmpHome, 'claude-repo')
 process.env.MYAGENTS_HOME = tmpHome
 const daemonEndpoint =
-  process.platform === 'win32'
-    ? `\\\\.\\pipe\\myagents-claude-live-${Date.now()}`
-    : path.join(tmpHome, 'daemon.sock')
+  process.platform === 'win32' ? `\\\\.\\pipe\\myagents-claude-live-${Date.now()}` : path.join(tmpHome, 'daemon.sock')
 
 execFileSync('git', ['init', gitRepoDir], { windowsHide: true })
 execFileSync('git', ['config', 'user.email', 'test@myagents.local'], { cwd: gitRepoDir, windowsHide: true })
@@ -109,7 +107,10 @@ try {
           if (parsed.params.kind === 'tool_start') toolStarts++
           if (parsed.params.kind === 'tool_result') toolResults++
         }
-        if (parsed.method === 'room.messageCreated' && (parsed.params.authorKind === 'agent' || parsed.params.authorKind === 'system')) {
+        if (
+          parsed.method === 'room.messageCreated' &&
+          (parsed.params.authorKind === 'agent' || parsed.params.authorKind === 'system')
+        ) {
           clearTimeout(timer)
           ws.off('message', onMsg)
           resolve(parsed.params)
@@ -122,7 +123,8 @@ try {
   const t1 = waitReply()
   await rpcCall(ws, '5', 'rooms.sendMessage', {
     roomId: room.id,
-    content: 'Read hello.txt in the workspace, then create a file named claude_note.txt containing "CLAUDE_LIVE_VERIFIED" and reply briefly.',
+    content:
+      'Read hello.txt in the workspace, then create a file named claude_note.txt containing "CLAUDE_LIVE_VERIFIED" and reply briefly.',
     idempotencyKey: 'claude-live-1'
   })
   const r1 = await t1
@@ -130,7 +132,10 @@ try {
   console.log('STREAM_STATS:', { streamChunks, toolStarts, toolResults })
 
   const diff = await rpcCall(ws, '6', 'git.diff', { workspaceId: proj.id })
-  console.log('GIT_DIFF_FILES:', diff.files.map((f) => ({ path: f.path, status: f.status, additions: f.additions })))
+  console.log(
+    'GIT_DIFF_FILES:',
+    diff.files.map((f) => ({ path: f.path, status: f.status, additions: f.additions }))
+  )
   let noteExists = false
   try {
     const content = readFileSync(path.join(gitRepoDir, 'claude_note.txt'), 'utf8')
@@ -155,7 +160,20 @@ try {
   console.log('TURN1_USAGE:', JSON.stringify(r1.meta?.usage))
   console.log('SESSION_FILE_PATH:', roomAfter.members[0]?.sessionFilePath)
   console.log('PERSISTED_NODE_EVENTS_COUNT:', events.length)
-  console.log('CLAUDE_LIVE_SUMMARY:', JSON.stringify({ turn1Ok: r1.authorKind === 'agent', noteExists, turn2Ok: r2.authorKind === 'agent' && r2.content.includes('CLAUDE_LIVE_VERIFIED'), streamChunks, toolStarts, toolResults, persistedEvents: events.length, hasSessionFile: Boolean(roomAfter.members[0]?.sessionFilePath), hasUsage: Boolean(r1.meta?.usage?.tokensPerSec && r1.meta?.usage?.contextUsedTokens) }))
+  console.log(
+    'CLAUDE_LIVE_SUMMARY:',
+    JSON.stringify({
+      turn1Ok: r1.authorKind === 'agent',
+      noteExists,
+      turn2Ok: r2.authorKind === 'agent' && r2.content.includes('CLAUDE_LIVE_VERIFIED'),
+      streamChunks,
+      toolStarts,
+      toolResults,
+      persistedEvents: events.length,
+      hasSessionFile: Boolean(roomAfter.members[0]?.sessionFilePath),
+      hasUsage: Boolean(r1.meta?.usage?.tokensPerSec && r1.meta?.usage?.contextUsedTokens)
+    })
+  )
 
   ws.close()
 } finally {

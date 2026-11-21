@@ -106,7 +106,8 @@ export function createSessionHost(emit: (event: DaemonEvent) => void): {
 
   const handlers: DaemonHandlers = {
     info: () => ({ protocolVersion: DAEMON_PROTOCOL_VERSION, version: '0.1.0', pid: process.pid }),
-    spawnPty: (params) => track('pty', params.sessionId, (events) => startPty(params, params.cols, params.rows, events)),
+    spawnPty: (params) =>
+      track('pty', params.sessionId, (events) => startPty(params, params.cols, params.rows, events)),
     spawnPipe: (params) => track('pipe', params.sessionId, (events) => startPipe(params, events, false)),
     spawnPipeClean: (params) => track('pipe', params.sessionId, (events) => startPipe(params, events, true)),
     write: ({ sessionId, data }) => {

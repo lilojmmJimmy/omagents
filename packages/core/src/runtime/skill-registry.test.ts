@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { myagentsSkillsDir } from '@myagents/protocol/node'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CoreDatabase } from '../storage/database'
 import { WorkspaceService } from '../workspace/workspace-service'
 import { AgentService } from './agent-service'
@@ -56,9 +56,7 @@ describe('SkillRegistryService', () => {
     expect(skill.description).toBe('Checks edge cases.')
     expect(skill.pinnedCommit).toBeNull()
 
-    await expect(
-      registry.install({ sourceType: 'local', sourceUri: localSkillDir })
-    ).rejects.toThrow(/already exists/)
+    await expect(registry.install({ sourceType: 'local', sourceUri: localSkillDir })).rejects.toThrow(/already exists/)
 
     const section = registry.loadPromptSection([skill.id])
     expect(section.promptBlock).toContain('## Equipped Skills')
